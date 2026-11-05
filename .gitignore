@@ -1,0 +1,14 @@
+# Nunca subir credenciales de servicio ni archivos de entorno.
+.env
+.env.*
+!.env.example
+*service-account*.json
+*serviceAccount*.json
+*.pem
+*.key
+.firebase/
+*-debug.log
+__pycache__/
+.DS_Store
+.idea/
+.vscode/

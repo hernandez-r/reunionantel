@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function esAdmin() {
+      // Reemplazar por el UID exacto de Authentication; nunca por correo o contraseña.
+      return request.auth != null
+        && request.auth.uid == 'REEMPLAZAR_UID_ADMIN';
+    }
+
+    function maxInvitados() {
+      // Mantener sincronizado con EVENTO.maxInvitados en js/config.js (0 a 10).
+      return 10;
+    }
+
+    function inscripcionAbierta() {
+      // 28/11/2026 03:00 UTC = fin del 27/11 en Uruguay. Límite exclusivo.
+      // Mantener sincronizado con EVENTO.cierreInscripciones en js/config.js.
+      return request.time < timestamp.date(2026, 11, 28) + duration.value(3, 'h');
+    }
+
+    function nombreValido(nombre) {
+      return nombre is string
+        && nombre.size() >= 3 && nombre.size() <= 120
+        && nombre.matches('^[^\\s]+( [^\\s]+)+$');
+    }
+
+    function invitadoValido(invitado) {
+      return invitado is map
+        && invitado.keys().hasAll(['nombre', 'tipo'])
+        && invitado.keys().hasOnly(['nombre', 'tipo'])
+        && nombreValido(invitado.nombre)
+        && invitado.tipo is string
+        && invitado.tipo in ['mayor', 'menor'];
+    }
+
+    function invitadoEnPosicionValido(invitados, indice) {
+      return invitados.size() <= indice || invitadoValido(invitados[indice]);
+    }
+
+    function invitadosValidos(invitados) {
+      // Rules no admite bucles: validar explícitamente TODOS los elementos permitidos.
+      // Aumentar el máximo por encima de 10 exige extender esta validación.
+      return invitados is list && invitados.size() <= maxInvitados()
+        && invitados.size() <= 10
+        && invitadoEnPosicionValido(invitados, 0)
+        && invitadoEnPosicionValido(invitados, 1)
+        && invitadoEnPosicionValido(invitados, 2)
+        && invitadoEnPosicionValido(invitados, 3)
+        && invitadoEnPosicionValido(invitados, 4)
+        && invitadoEnPosicionValido(invitados, 5)
+        && invitadoEnPosicionValido(invitados, 6)
+        && invitadoEnPosicionValido(invitados, 7)
+        && invitadoEnPosicionValido(invitados, 8)
+        && invitadoEnPosicionValido(invitados, 9);
+    }
+
+    function datosValidos(datos) {
+      return datos.keys().hasAll(['titular', 'invitados', 'pagado', 'fechaRegistro'])
+        && datos.keys().hasOnly(['titular', 'invitados', 'pagado', 'fechaRegistro'])
+        && nombreValido(datos.titular)
+        && invitadosValidos(datos.invitados)
+        && datos.pagado is bool
+        && datos.fechaRegistro is timestamp;
+    }
+
+    match /inscripciones/{inscripcionId} {
+      allow get, list: if esAdmin();
+      allow create: if inscripcionId.matches('^[a-zA-Z0-9]{20}$')
+        && datosValidos(request.resource.data)
+        && request.resource.data.fechaRegistro == request.time
+        && (esAdmin() || (inscripcionAbierta() && request.resource.data.pagado == false));
+      allow update: if esAdmin()
+        && datosValidos(request.resource.data)
+        && request.resource.data.fechaRegistro == resource.data.fechaRegistro;
+      allow delete: if esAdmin();
+    }
+
+    // Incluye futuras subcolecciones: nada se habilita implícitamente.
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}

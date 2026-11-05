@@ -1,0 +1,166 @@
+"""Prueba reglas REALES contra un emulador Firestore local, sin SDK ni Node.js.
+
+Requiere el emulador en 127.0.0.1:8787 (README). Nunca apunta a producción.
+Carga variantes de las reglas solo en memoria del emulador para probar el cierre.
+"""
+import base64
+import copy
+import json
+from pathlib import Path
+import re
+import secrets
+import time
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
+
+HOST = 'http://127.0.0.1:8787'
+PROYECTO = 'demo-reunion-test'
+BASE = f'{HOST}/v1/projects/{PROYECTO}/databases/(default)/documents'
+NOMBRE_BASE = f'projects/{PROYECTO}/databases/(default)/documents'
+ORIGINALES = Path(__file__).resolve().parents[1].joinpath('firestore.rules').read_text()
+UID_ADMIN = re.search(r"request.auth.uid == '([^']+)'", ORIGINALES).group(1)
+creados = []
+aprobadas = 0
+
+
+def token(uid):
+    def codificar(valor):
+        return base64.urlsafe_b64encode(json.dumps(valor).encode()).decode().rstrip('=')
+    ahora = int(time.time())
+    return codificar({'alg': 'none', 'typ': 'JWT'}) + '.' + codificar({
+        'iss': f'https://securetoken.google.com/{PROYECTO}', 'aud': PROYECTO,
+        'auth_time': ahora, 'user_id': uid, 'sub': uid, 'iat': ahora, 'exp': ahora + 3600,
+        'firebase': {'identities': {}, 'sign_in_provider': 'password'},
+    }) + '.'
+
+
+def solicitar(metodo, url, datos=None, uid=None):
+    headers = {'Content-Type': 'application/json'}
+    if uid:
+        headers['Authorization'] = 'Bearer ' + token(uid)
+    request = Request(url, data=json.dumps(datos).encode() if datos is not None else None,
+                      headers=headers, method=metodo)
+    try:
+        with urlopen(request, timeout=30) as respuesta:
+            contenido = respuesta.read()
+            return respuesta.status, json.loads(contenido) if contenido else {}
+    except HTTPError as error:
+        return error.code, json.loads(error.read())
+
+
+def comprobar(nombre, respuesta, esperado=200):
+    global aprobadas
+    estado, contenido = respuesta
+    if estado != esperado:
+        raise AssertionError(f'{nombre}: esperado HTTP {esperado}, recibido {estado}: {contenido}')
+    aprobadas += 1
+    print(f'✓ {nombre}')
+    return contenido
+
+
+def cargar_reglas(texto):
+    comprobar('Compilación de reglas en emulador', solicitar('PUT',
+        f'{HOST}/emulator/v1/projects/{PROYECTO}:securityRules',
+        {'rules': {'files': [{'name': 'firestore.rules', 'content': texto}]}}))
+
+
+def valor(dato):
+    if isinstance(dato, bool):
+        return {'booleanValue': dato}
+    if isinstance(dato, str):
+        return {'stringValue': dato}
+    if isinstance(dato, list):
+        return {'arrayValue': {'values': [valor(item) for item in dato]}}
+    if isinstance(dato, dict):
+        return {'mapValue': {'fields': {clave: valor(item) for clave, item in dato.items()}}}
+    if isinstance(dato, int):
+        return {'integerValue': str(dato)}
+    return {'nullValue': None}
+
+
+def nueva(datos=None, uid=None, servidor=True, coleccion='inscripciones', identificador=None):
+    identificador = identificador or secrets.token_hex(10)
+    ruta = f'{coleccion}/{identificador}'
+    documento = {'name': f'{NOMBRE_BASE}/{ruta}', 'fields': {
+        clave: valor(item) for clave, item in (datos or {'titular': 'Juan Pérez', 'invitados': [], 'pagado': False}).items()
+    }}
+    escritura = {'update': documento, 'currentDocument': {'exists': False}}
+    if servidor:
+        escritura['updateTransforms'] = [{'fieldPath': 'fechaRegistro', 'setToServerValue': 'REQUEST_TIME'}]
+    else:
+        documento['fields']['fechaRegistro'] = {'timestampValue': '2020-01-01T00:00:00Z'}
+    respuesta = solicitar('POST', BASE + ':commit', {'writes': [escritura]}, uid)
+    if respuesta[0] == 200:
+        creados.append(ruta)
+    return respuesta, ruta
+
+
+def editar(ruta, datos, uid=None):
+    return solicitar('PATCH', f'{BASE}/{ruta}?' + '&'.join(f'updateMask.fieldPaths={clave}' for clave in datos),
+                     {'fields': {clave: valor(item) for clave, item in datos.items()}}, uid)
+
+
+try:
+    # Compila primero los archivos tal como se entregan, sin modificar producción.
+    cargar_reglas(ORIGINALES)
+    abiertas = re.sub(r'timestamp.date\(\d+,\s*\d+,\s*\d+\)', 'timestamp.date(2099, 11, 28)', ORIGINALES)
+    cerradas = re.sub(r'timestamp.date\(\d+,\s*\d+,\s*\d+\)', 'timestamp.date(2000, 11, 28)', ORIGINALES)
+    cargar_reglas(abiertas)
+    respuesta, ruta = nueva()
+    comprobar('Público crea titular solo con serverTimestamp', respuesta)
+    invitado = {'nombre': 'María López', 'tipo': 'mayor'}
+    grupo = {'titular': 'Juan Pérez', 'invitados': [invitado,
+        {'nombre': 'Pedro Pérez', 'tipo': 'menor'}, {'nombre': 'Lucía Pérez', 'tipo': 'menor'}], 'pagado': False}
+    comprobar('Público crea titular y tres invitados', nueva(grupo)[0])
+    comprobar('Público no puede leer un documento', solicitar('GET', BASE + '/' + ruta), 403)
+    comprobar('Público no puede listar', solicitar('GET', BASE + '/inscripciones'), 403)
+    comprobar('Público no puede marcar pago', editar(ruta, {'pagado': True}), 403)
+    comprobar('Público no puede editar nombre', editar(ruta, {'titular': 'Otra Persona'}), 403)
+    comprobar('Público no puede borrar', solicitar('DELETE', BASE + '/' + ruta), 403)
+    comprobar('UID distinto no puede listar', solicitar('GET', BASE + '/inscripciones', uid='no-autorizado'), 403)
+    comprobar('UID distinto no puede leer documento', solicitar('GET', BASE + '/' + ruta, uid='no-autorizado'), 403)
+    comprobar('UID distinto no puede editar', editar(ruta, {'pagado': True}, 'no-autorizado'), 403)
+    comprobar('Público no puede crearse pagado', nueva({**grupo, 'pagado': True})[0], 403)
+    comprobar('Público no puede escribir en otra colección', nueva(coleccion='secretos')[0], 403)
+    comprobar('ID de alta inválido rechazado', nueva(identificador='id-corto')[0], 403)
+    comprobar('Timestamp arbitrario rechazado', nueva(servidor=False)[0], 403)
+    comprobar('Campo extra de documento rechazado', nueva({**grupo, 'admin': True})[0], 403)
+    comprobar('Campo faltante rechazado', nueva({'titular': 'Juan Pérez', 'pagado': False})[0], 403)
+    comprobar('Nombre de una palabra rechazado', nueva({**grupo, 'titular': 'Juan'})[0], 403)
+    comprobar('Nombre demasiado largo rechazado', nueva({**grupo, 'titular': 'Juan ' + 'x' * 120})[0], 403)
+    comprobar('Tipo de titular inválido rechazado', nueva({**grupo, 'titular': 25})[0], 403)
+    comprobar('Pago no booleano rechazado', nueva({**grupo, 'pagado': 'false'})[0], 403)
+    comprobar('Invitados debe ser lista', nueva({**grupo, 'invitados': {}})[0], 403)
+    for posicion in range(10):
+        invitados = [copy.deepcopy(invitado) for _ in range(10)]
+        invitados[posicion]['tipo'] = 'adulto'
+        comprobar(f'Invitado inválido en posición {posicion + 1} rechazado', nueva({**grupo, 'invitados': invitados})[0], 403)
+    comprobar('Campo extra de invitado rechazado', nueva({**grupo, 'invitados': [{**invitado, 'pagado': True}]})[0], 403)
+    comprobar('Invitado no mapa rechazado', nueva({**grupo, 'invitados': ['Persona Invitada']})[0], 403)
+    comprobar('Lista con 10 invitados aceptada', nueva({**grupo, 'invitados': [invitado] * 10})[0])
+    comprobar('Lista con 11 invitados rechazada', nueva({**grupo, 'invitados': [invitado] * 11})[0], 403)
+    documento = comprobar('Administrador puede leer', solicitar('GET', BASE + '/' + ruta, uid=UID_ADMIN))
+    fecha = documento['fields']['fechaRegistro']['timestampValue']
+    comprobar('Administrador puede listar', solicitar('GET', BASE + '/inscripciones', uid=UID_ADMIN))
+    comprobar('Administrador marca pago', editar(ruta, {'pagado': True}, UID_ADMIN))
+    comprobar('Administrador desmarca pago', editar(ruta, {'pagado': False}, UID_ADMIN))
+    comprobar('Administrador edita participantes', editar(ruta, {'titular': 'Ana López', 'invitados': [invitado]}, UID_ADMIN))
+    comprobar('Administrador quita invitado', editar(ruta, {'invitados': []}, UID_ADMIN))
+    modificado = comprobar('Fecha original se conserva al editar', solicitar('GET', BASE + '/' + ruta, uid=UID_ADMIN))
+    assert modificado['fields']['fechaRegistro']['timestampValue'] == fecha
+    escritura = {'update': {'name': NOMBRE_BASE + '/' + ruta, 'fields': {}},
+                 'updateMask': {'fieldPaths': ['fechaRegistro']},
+                 'updateTransforms': [{'fieldPath': 'fechaRegistro', 'setToServerValue': 'REQUEST_TIME'}]}
+    comprobar('Administrador no cambia fechaRegistro', solicitar('POST', BASE + ':commit', {'writes': [escritura]}, UID_ADMIN), 403)
+    comprobar('Administrador no agrega campos extra', editar(ruta, {'total': 15}, UID_ADMIN), 403)
+    cargar_reglas(cerradas)
+    comprobar('Cierre rechaza alta pública válida', nueva(grupo)[0], 403)
+    comprobar('Cierre también rechaza UID no autorizado', nueva(grupo, uid='no-autorizado')[0], 403)
+    comprobar('Administrador puede crear después del cierre', nueva(grupo, uid=UID_ADMIN)[0])
+    comprobar('Administrador puede borrar', solicitar('DELETE', BASE + '/' + ruta, uid=UID_ADMIN))
+    print(f'\n{aprobadas} pruebas de reglas aprobadas contra Firestore Emulator.')
+finally:
+    # Solo este proyecto demo del emulador, nunca producción. Restaurar reglas originales.
+    for ruta_creada in creados:
+        solicitar('DELETE', BASE + '/' + ruta_creada, uid=UID_ADMIN)
+    cargar_reglas(ORIGINALES)
