@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es-UY">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#154f46">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Administración · Reunión de fin de año</title>
+  <link rel="stylesheet" href="./css/styles.css">
+  <script type="module" src="./js/admin.js"></script>
+</head>
+<body class="pagina-admin">
+  <a class="saltar" href="#contenido-admin">Ir al contenido</a>
+  <header class="barra-admin"><div class="contenedor barra-admin-interior"><a class="marca" href="./index.html"><span class="marca-icono" aria-hidden="true">✳</span> NOS ENCONTRAMOS</a><div class="sesion"><span class="etiqueta-privado">ADMINISTRACIÓN</span><button id="salir" class="boton boton-secundario boton-pequeno" type="button" hidden>Cerrar sesión</button></div></div></header>
+  <main id="contenido-admin" class="contenedor">
+    <section id="login" class="tarjeta login" aria-labelledby="login-titulo">
+      <span class="ceja">ESPACIO PRIVADO</span><h1 id="login-titulo">Hola, organización.</h1><p>Ingresá para gestionar las inscripciones, los invitados y los pagos del encuentro.</p>
+      <noscript><p class="mensaje mensaje--error">Habilitá JavaScript para administrar.</p></noscript>
+      <div id="estado-auth" class="mensaje" role="status" aria-live="polite">Comprobando sesión…</div>
+      <form id="login-form"><fieldset id="login-campos" disabled><legend class="solo-lectores">Acceso de administrador</legend><div class="campo"><label for="correo">Correo electrónico</label><input id="correo" name="correo" type="email" autocomplete="username" required maxlength="254"></div><div class="campo"><label for="clave">Contraseña</label><input id="clave" name="clave" type="password" autocomplete="current-password" required></div><button id="entrar" class="boton boton-primario boton-ancho" type="submit">Iniciar sesión <span aria-hidden="true">→</span></button></fieldset></form>
+      <p class="nota">Acceso exclusivo para la cuenta autorizada. No se crean cuentas desde este sitio.</p><a class="enlace" href="./index.html">← Volver a la inscripción</a>
+    </section>
+
+    <section id="dashboard" hidden aria-labelledby="panel-titulo">
+      <div class="encabezado-panel"><div><span class="ceja">VISTA GENERAL</span><h1 id="panel-titulo" data-evento="nombre"></h1><p><span data-evento="fecha"></span> <span aria-hidden="true">·</span> <span data-evento="lugar"></span></p></div><button id="nueva-inscripcion" type="button" class="boton boton-primario">+ Nueva inscripción</button></div>
+      <div class="estadisticas" aria-label="Estadísticas del evento">
+        <article class="tarjeta estadistica"><span>Inscripciones</span><strong data-estadistica="grupos">0</strong><small>grupos confirmados</small></article>
+        <article class="tarjeta estadistica"><span>Total de personas</span><strong data-estadistica="personas">0</strong><small>titulares e invitados</small></article>
+        <article class="tarjeta estadistica"><span>Mayores</span><strong data-estadistica="mayores">0</strong><small>incluye a los titulares</small></article>
+        <article class="tarjeta estadistica"><span>Menores</span><strong data-estadistica="menores">0</strong><small>invitados menores</small></article>
+        <article class="tarjeta estadistica estadistica--pagado"><span>Personas · pagado</span><strong data-estadistica="pagadas">0</strong><small>pago del grupo recibido</small></article>
+        <article class="tarjeta estadistica estadistica--pendiente"><span>Personas · pendiente</span><strong data-estadistica="pendientes">0</strong><small>pago del grupo pendiente</small></article>
+      </div>
+      <div id="estado-admin" role="status" aria-live="polite" hidden></div>
+      <section class="tarjeta listado" aria-labelledby="listado-titulo">
+        <div class="listado-encabezado"><div><h2 id="listado-titulo">Inscripciones</h2><p id="resultados" aria-live="polite">Cargando inscripciones…</p></div><button id="exportar" type="button" class="boton boton-secundario boton-pequeno">Exportar CSV ↓</button></div>
+        <div class="filtros"><div class="campo campo-busqueda"><label for="buscar">Buscar personas</label><input id="buscar" type="search" placeholder="Titular o invitado…" autocomplete="off"></div><div class="campo"><label for="filtro-pago">Estado de pago</label><select id="filtro-pago"><option value="todos">Todos</option><option value="pagados">Pagados</option><option value="pendientes">Pendientes</option></select></div><div class="campo"><label for="orden">Orden alfabético</label><select id="orden"><option value="asc">A → Z</option><option value="desc">Z → A</option></select></div></div>
+        <div class="tabla-scroll" role="region" aria-label="Inscripciones; deslizá horizontalmente para ver todas las columnas" tabindex="0"><table><caption class="solo-lectores">Grupos inscriptos y estado de pago</caption><thead><tr><th scope="col">Titular</th><th scope="col">Mayores</th><th scope="col">Menores</th><th scope="col">Total</th><th scope="col">Pago del grupo</th><th scope="col">Acciones</th></tr></thead><tbody id="filas"></tbody></table></div>
+        <div id="sin-resultados" class="vacio" hidden><strong>No hay inscripciones para mostrar.</strong><p>Probá con otros filtros o registrá un nuevo grupo.</p></div>
+        <p class="nota pie-listado">Los pagos corresponden al grupo completo. Las estadísticas muestran el total del evento, sin aplicar filtros. El CSV incluye solo los resultados filtrados.</p>
+      </section>
+    </section>
+  </main>
+  <footer class="pie contenedor"><span data-evento="nombre"></span><a href="./index.html">Ver formulario público ↗</a></footer>
+
+  <dialog id="editor-dialogo" aria-labelledby="editor-titulo"><div class="dialogo-contenido"><span class="ceja">GESTIÓN DE ASISTENTES</span><h2 id="editor-titulo">Nueva inscripción</h2><p class="nota">El titular siempre es mayor. Podés registrar grupos manualmente incluso después del cierre público.</p><div id="editor-estado" role="alert" hidden></div><form id="editor-form"><fieldset id="editor-campos"><legend class="solo-lectores">Datos de la inscripción</legend><div class="campo"><label for="editor-titular">Nombre y apellido del titular</label><input id="editor-titular" name="titular" type="text" autocomplete="off" required minlength="3" maxlength="120"></div><div class="separador"><h3>Invitados</h3><span>Opcional</span></div><div data-invitados class="lista-invitados"></div><button type="button" class="boton boton-secundario boton-ancho" data-agregar>+ Agregar invitado</button><p class="ayuda" data-limite></p><div class="resumen" aria-live="polite" aria-atomic="true"><div><strong data-cuenta="total">1</strong><span>Personas</span></div><div><strong data-cuenta="mayores">1</strong><span>Mayores</span></div><div><strong data-cuenta="menores">0</strong><span>Menores</span></div></div><div class="acciones-dialogo"><button id="editor-cancelar" type="button" class="boton boton-secundario">Cancelar</button><button id="editor-guardar" type="submit" class="boton boton-primario">Guardar inscripción</button></div></fieldset></form></div></dialog>
+
+  <dialog id="eliminar-dialogo" aria-labelledby="eliminar-titulo"><div class="dialogo-contenido"><span class="ceja peligro">ACCIÓN PERMANENTE</span><h2 id="eliminar-titulo">¿Eliminar inscripción?</h2><p id="eliminar-descripcion"></p><p class="nota">Se eliminarán el titular y todos sus invitados. Esta acción no se puede deshacer.</p><div id="eliminar-estado" role="alert" hidden></div><div class="acciones-dialogo"><button id="eliminar-cancelar" type="button" class="boton boton-secundario">Cancelar</button><button id="eliminar-confirmar" type="button" class="boton boton-peligro">Eliminar inscripción</button></div></div></dialog>
+</body>
+</html>
