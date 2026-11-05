@@ -264,3 +264,4 @@ Casos negativos adicionales: documento sin un campo, `pagado: 'false'`, `invitad
 - **Cambiaste configuración pero no se refleja:** esperá el despliegue de Pages y recargá sin caché. Cambiar un archivo local no actualiza ni Pages ni las reglas publicadas.
 
 La retención y eliminación de nombres, el consentimiento aplicable y la distribución del CSV son responsabilidad de la organización. Eliminá los datos cuando ya no sean necesarios.
+# reunionantel
