@@ -5,14 +5,28 @@ import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com
 
 // Copiar desde Firebase Console > Configuración del proyecto > Tus apps.
 // Estos identificadores son públicos; la seguridad está en las reglas y Authentication.
-export const firebaseConfig = {
-  apiKey: 'REEMPLAZAR_API_KEY',
-  authDomain: 'REEMPLAZAR_PROYECTO.firebaseapp.com',
-  projectId: 'REEMPLAZAR_PROYECTO',
-  storageBucket: 'REEMPLAZAR_PROYECTO.firebasestorage.app',
-  messagingSenderId: 'REEMPLAZAR_SENDER_ID',
-  appId: 'REEMPLAZAR_APP_ID',
-};
+ // Your web app's Firebase configuration
+
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+
+  const firebaseConfig = {
+
+    apiKey: "AIzaSyBlCi24xaFtsJzgiqmbRFcvLVma1tRAvO8",
+
+    authDomain: "antelreunion.firebaseapp.com",
+
+    projectId: "antelreunion",
+
+    storageBucket: "antelreunion.firebasestorage.app",
+
+    messagingSenderId: "849834243531",
+
+    appId: "1:849834243531:web:bfd33f54bbd03e0f46324e",
+
+    measurementId: "G-LRGDGHQBF7"
+
+  };
+
 
 // Opcional: clave PÚBLICA de sitio reCAPTCHA v3 registrada en App Check.
 export const appCheckSiteKey = '';
