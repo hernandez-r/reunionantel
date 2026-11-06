@@ -83,6 +83,10 @@ for archivo in ROOT.joinpath('js').glob('*.js'):
             verificar(selector in documentos[pagina].ids, f'{archivo.name}: ID #{selector} no existe en {pagina}')
 
 verificar(len(versiones) == 1, f'Versiones de Firebase inconsistentes: {versiones}')
+firebase = ROOT.joinpath('js/firebase-config.js').read_text()
+verificar('firebase-app-check.js' not in firebase, 'App Check no debe cargarse en esta versión')
+verificar('initializeAppCheck' not in firebase, 'App Check no debe inicializarse en esta versión')
+verificar('appCheckSiteKey' not in firebase, 'Quedó configuración obsoleta de App Check')
 reglas = ROOT.joinpath('firestore.rules').read_text()
 config = ROOT.joinpath('js/config.js').read_text()
 verificar('allow read, write: if true' not in reglas, 'Permisos globales abiertos')

@@ -21,7 +21,7 @@ index.html                 Formulario público
 admin.html                 Acceso y panel privado
 css/styles.css             Diseño compartido, sin librerías
 js/config.js               Evento, plazos, límite y UID público del admin
-js/firebase-config.js      SDK modular, configuración pública y App Check
+js/firebase-config.js      SDK modular y configuración pública (sin App Check)
 js/registro.js             Alta pública y confirmación
 js/auth.js                 Sesión de Authentication y comprobación de UID
 js/admin.js                Suscripción en vivo, tabla y operaciones
@@ -98,19 +98,20 @@ Para publicar:
 - El ID de alta debe ser alfanumérico de 20 caracteres, como el generado por `doc(collection(...))`.
 - Todo el resto (incluidas subcolecciones) queda denegado. No hay permisos globales ni lecturas públicas.
 
-## 5. Reducir abuso con App Check
+## 5. App Check retirado y prevención de abuso
 
-Un formulario anónimo puede recibir nombres falsos y altas automatizadas. La validación y el plazo no son un control de identidad ni un límite de solicitudes. **App Check reduce abuso, no lo elimina** ni sustituye las reglas.
+Esta versión **no carga ni inicializa Firebase App Check ni reCAPTCHA**. La autorización del administrador y la privacidad de los registros siguen protegidas por Authentication y las reglas de Firestore; no se habilitaron lecturas o modificaciones públicas.
 
-1. Registrá una clave de sitio **reCAPTCHA v3** en la consola de reCAPTCHA, para `usuario.github.io` y los dominios necesarios. La clave del sitio es pública; la clave secreta no se publica.
-2. En **Firebase Console → App Check**, seleccioná la app web y configurá el proveedor reCAPTCHA v3 con los datos solicitados por la consola (la clave secreta va allí, no en el código).
-3. Poné **solo la clave pública del sitio** en `appCheckSiteKey` de `js/firebase-config.js`.
-4. Publicá la aplicación, probala y revisá las métricas de solicitudes verificadas en App Check.
-5. Cuando funcione, activá **Enforcement / Exigir** para **Cloud Firestore**. Con enforcement, los clientes sin un token válido de App Check serán rechazados incluso si satisfacen las reglas.
-6. Para desarrollo local, seguí la [documentación del proveedor de depuración](https://firebase.google.com/docs/app-check/web/debug-provider): la bandera `self.FIREBASE_APPCHECK_DEBUG_TOKEN = true` debe configurarse **localmente antes de inicializar App Check**, y el token generado debe registrarse en la consola. No publiques esa bandera, un token de depuración ni una variante de producción que omita App Check.
-7. Consultá la disponibilidad de protección de Authentication con App Check para tu proyecto antes de exigirla; requiere configuración/compatibilidad adicional. El paso necesario aquí es proteger Firestore.
+**Importante:** quitar App Check del código no desactiva su exigencia en Firebase. Si lo habías activado:
 
-También revisá cuotas, uso y alertas de presupuesto. Las alertas no son un tope de gasto. Una protección fuerte contra spam, límites por IP o unicidad real requieren un backend confiable y quedan fuera del alcance estático de este proyecto. Restringí APIs/dominios según las recomendaciones de Firebase sin bloquear los servicios necesarios.
+1. Abrí **Firebase Console → proyecto `antelreunion` → App Check → APIs**.
+2. Seleccioná **Cloud Firestore** y desactivá **Exigir / Enforcement** (dejalo en supervisión o sin exigencia, según el texto que muestre la consola).
+3. Si también exigiste App Check para **Authentication**, desactivá esa exigencia.
+4. Guardá los cambios y esperá a que se propaguen. Publicá esta versión de la aplicación y recargá sin caché.
+
+No hace falta eliminar la app de Firebase ni modificar sus claves. Si persiste `permission-denied`, comprobá que las reglas completas de `firestore.rules` estén **publicadas en el mismo proyecto y en la base `(default)`** que usa la aplicación. Subirlas a GitHub no las publica en Firebase.
+
+Un formulario anónimo sin App Check tiene menos protección frente a registros automatizados. La validación y el plazo no comprueban identidad ni limitan la cantidad de solicitudes. Revisá cuotas, uso y alertas de presupuesto; las alertas no son un tope de gasto. Una protección fuerte contra spam, límites por IP o unicidad real requieren un backend confiable y quedan fuera del alcance estático de este proyecto. Restringí APIs/dominios según las recomendaciones de Firebase sin bloquear los servicios necesarios.
 
 ## 6. Probar localmente (sin Node.js)
 
@@ -145,7 +146,7 @@ La página pública no lee el documento después de crearlo: muestra el ID conoc
 3. En **Settings → Pages → Build and deployment**, elegí **Deploy from a branch**.
 4. Elegí `main` y `/ (root)`, guardá y esperá el despliegue.
 5. Abrí `https://usuario.github.io/reunion-fin-ano/` y `https://usuario.github.io/reunion-fin-ano/admin.html`.
-6. Agregá `usuario.github.io` a los dominios autorizados de Authentication y al proveedor reCAPTCHA, si corresponde.
+6. Agregá `usuario.github.io` a los dominios autorizados de Authentication.
 7. Repetí las pruebas de permisos y funcionalidades en esa URL, no solo en localhost.
 
 Todas las rutas propias son relativas (`./css/…`, `./js/…`, `./admin.html`). No hay rutas SPA ni un servidor backend. El SDK de Firebase usa URLs externas absolutas intencionalmente. Las reglas se publican por separado en Firebase Console.
@@ -233,7 +234,7 @@ Usá un proyecto de prueba y nombres ficticios; luego borrá esos datos desde el
 | Buscar invitado/titular y filtrar pagos, ordenar y exportar | Resultados correctos; CSV incluye las personas de esos grupos |
 | GitHub Pages en subdirectorio | CSS, imports, login y escrituras sin errores 404 |
 | Pantallas de 360 px y escritorio, teclado y zoom 200% | Campos legibles, botones accesibles, tabla desplazable, diálogos utilizables |
-| App Check exigido: cliente válido / sin token | Cliente válido funciona; petición sin token rechazada |
+| Versión sin App Check: comprobar configuración en Console | Firestore y Authentication no exigen App Check; reglas de seguridad siguen activas |
 
 Para ensayar el cierre antes de la fecha real, ajustá temporalmente **ambos plazos** en un proyecto de prueba. No alteres la fecha de producción para hacer pruebas. Para comprobar un usuario no autorizado, creá una segunda cuenta de prueba desde Console, nunca cambies su UID a administrador.
 
@@ -252,15 +253,15 @@ Casos negativos adicionales: documento sin un campo, `pagado: 'false'`, `invitad
 - Dashboard con SDK real y emulador: consulta, pago del grupo, quitar invitado, actualización en vivo, eliminación confirmada y limpieza al salir. **La frontera de Authentication fue simulada en esta prueba de interfaz**, no se comprobó un login de producción.
 - Sin desbordes de página a 360, 768 y 1440 px; tabla con scroll propio y navegación desde un subdirectorio `/reunion-fin-ano/`. Revisión visual de la página pública en móvil y escritorio. Para sortear una limitación de red del navegador del entorno de pruebas, se sirvió una copia temporal del SDK oficial sin cambiar los archivos entregados.
 
-**Pendiente de verificar con tu proyecto:** Authentication real (incluyendo recarga y UID no autorizado), persistencia/permisos en Firebase desplegado, App Check y GitHub Pages remoto. No se dan por realizados sin tu configuración. No actives el enlace público hasta completar la matriz.
+**Pendiente de verificar con tu proyecto:** Authentication real (incluyendo recarga y UID no autorizado), persistencia/permisos en Firebase desplegado, desactivación de la exigencia de App Check si estaba habilitada y GitHub Pages remoto. No se dan por realizados sin tu configuración. No actives el enlace público hasta completar la matriz.
 
 ## Resolución rápida de problemas
 
 - **Falta configurar Firebase / UID:** reemplazá marcadores en los archivos indicados.
-- **`permission-denied` al inscribirse:** revisá fecha del servidor, reglas publicadas, tipos/campos y App Check.
+- **`permission-denied` al inscribirse:** verificá que las reglas completas estén publicadas en el proyecto y base `(default)` usados por la app; revisá fecha del servidor y tipos/campos. Esta versión no usa App Check: si lo exigís desde Console, desactivá esa exigencia según el apartado 5.
 - **`permission-denied` al administrar:** compará el UID de la cuenta con las reglas y `js/config.js`.
 - **Credenciales inválidas:** revisá la cuenta creada manualmente y proveedor Email/Password. No publiques claves de acceso para depurar.
-- **Carga infinita / red fallida:** revisá conectividad, bloqueo de gstatic/googleapis/reCAPTCHA y dominios autorizados; no cierres una escritura pendiente sin verificarla luego en Console.
+- **Carga infinita / red fallida:** revisá conectividad, bloqueo de gstatic/googleapis y dominios autorizados; no cierres una escritura pendiente sin verificarla luego en Console.
 - **Cambiaste configuración pero no se refleja:** esperá el despliegue de Pages y recargá sin caché. Cambiar un archivo local no actualiza ni Pages ni las reglas publicadas.
 
 La retención y eliminación de nombres, el consentimiento aplicable y la distribución del CSV son responsabilidad de la organización. Eliminá los datos cuando ya no sean necesarios.
