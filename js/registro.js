@@ -2,6 +2,7 @@ import { collection, doc, serverTimestamp, setDoc } from 'https://www.gstatic.co
 import { EVENTO, inscripcionesAbiertas } from './config.js';
 import { getFirebase } from './firebase-config.js';
 import { crearFormularioParticipantes } from './formulario.js';
+import { observarEvento } from './evento-service.js';
 import { contarPersonas } from './inscripciones.js';
 import { mostrarEvento, mensaje, describirError, mostrarResumen } from './ui.js';
 
@@ -18,11 +19,13 @@ let db;
 let enviando = false;
 let completado = false;
 let datosPendientes;
+let configuracionLista = false;
+let versionEvento;
 // Reutilizamos el ID ante reintentos. Un segundo envío nunca crea otro documento.
 let referencia;
 
 function revisarPlazo() {
-  if (completado || !db) return;
+  if (completado || !db || !configuracionLista) return;
   const abierto = inscripcionesAbiertas();
   campos.disabled = !abierto || enviando;
   if (!abierto && !enviando) {
@@ -34,16 +37,40 @@ function revisarPlazo() {
 try {
   editor = crearFormularioParticipantes(formulario, EVENTO.maxInvitados);
   ({ db } = getFirebase());
-  campos.disabled = false;
-  mensaje(estado);
-  revisarPlazo();
+  mensaje(estado, 'Cargando la información del evento…');
+  observarEvento(db, (datos) => {
+    if (completado) return;
+    if (!datos) {
+      configuracionLista = false;
+      campos.disabled = true;
+      if (dialogo.open && !enviando) dialogo.close();
+      mensaje(estado, 'La organización todavía no guardó la configuración del evento. Intentá nuevamente más tarde.', 'aviso');
+      return;
+    }
+    const cambio = versionEvento && versionEvento !== datos.version;
+    versionEvento = datos.version;
+    configuracionLista = true;
+    mostrarEvento();
+    mensaje(estado);
+    if (cambio && dialogo.open && !enviando) {
+      dialogo.close();
+      mensaje(estado, 'La organización actualizó el evento. Revisá la información antes de volver a confirmar.', 'aviso');
+    }
+    revisarPlazo();
+  }, () => {
+    if (completado) return;
+    configuracionLista = false;
+    campos.disabled = true;
+    if (dialogo.open && !enviando) dialogo.close();
+    mensaje(estado, 'No se pudo cargar la configuración del evento. La organización debe revisar la conexión y publicar las reglas actualizadas de Firestore.', 'error');
+  });
 } catch (error) {
   mensaje(estado, describirError(error, 'preparar el formulario'), 'error');
 }
 
 formulario.addEventListener('submit', (event) => {
   event.preventDefault();
-  if (!db || enviando || completado) return;
+  if (!db || !configuracionLista || enviando || completado) return;
   revisarPlazo();
   if (!inscripcionesAbiertas()) return;
   const error = editor.validar();
@@ -61,7 +88,7 @@ volver.addEventListener('click', () => { if (!enviando) dialogo.close(); });
 dialogo.addEventListener('cancel', (event) => { if (enviando) event.preventDefault(); });
 
 guardar.addEventListener('click', async () => {
-  if (enviando || completado || !datosPendientes || !db) return;
+  if (enviando || completado || !configuracionLista || !datosPendientes || !db) return;
   if (!inscripcionesAbiertas()) { revisarPlazo(); return; }
   if (!navigator.onLine) { mensaje(errorDialogo, 'No hay conexión. Conectate a Internet antes de confirmar.', 'error'); return; }
   enviando = true; // Antes del primer await: evita envíos por doble clic.

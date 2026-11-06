@@ -31,6 +31,28 @@
         <article class="tarjeta estadistica estadistica--pagado"><span>Personas · pagado</span><strong data-estadistica="pagadas">0</strong><small>pago del grupo recibido</small></article>
         <article class="tarjeta estadistica estadistica--pendiente"><span>Personas · pendiente</span><strong data-estadistica="pendientes">0</strong><small>pago del grupo pendiente</small></article>
       </div>
+      <details id="configuracion-evento" class="tarjeta configuracion-evento">
+        <summary><span><strong>Configuración del evento</strong><small>Nombre, lugar, fechas y ticket de referencia</small></span><span class="configuracion-indicador" aria-hidden="true">Editar <span>⌄</span></span></summary>
+        <div class="configuracion-contenido">
+          <p class="nota">Los cambios se publican automáticamente en el formulario. Todas las fechas corresponden a Uruguay; la inscripción cierra al terminar el día elegido.</p>
+          <div id="evento-estado" role="status" aria-live="polite" hidden></div>
+          <form id="evento-form">
+            <fieldset id="evento-campos" disabled>
+              <legend class="solo-lectores">Configuración pública del evento</legend>
+              <div class="configuracion-grilla">
+                <div class="campo"><label for="evento-nombre">Nombre del evento</label><input id="evento-nombre" name="nombre" type="text" required minlength="3" maxlength="120" autocomplete="off"></div>
+                <div class="campo"><label for="evento-lugar">Lugar</label><input id="evento-lugar" name="lugar" type="text" required minlength="3" maxlength="180" autocomplete="off"></div>
+                <div class="campo"><label for="evento-fecha">Fecha del encuentro</label><input id="evento-fecha" name="fecha" type="date" required min="2020-01-01" max="2100-12-31"></div>
+                <div class="campo"><label for="evento-confirmacion">Confirmar asistencia hasta el</label><input id="evento-confirmacion" name="limiteConfirmacion" type="date" required min="2020-01-01" max="2100-12-31"></div>
+                <div class="campo"><label for="evento-pago">Fecha límite de pago</label><input id="evento-pago" name="limitePago" type="date" required min="2020-01-01" max="2100-12-31"></div>
+                <div class="campo"><label for="evento-ticket">Ticket de referencia (UYU)</label><input id="evento-ticket" name="ticketReferencia" type="number" required min="0" max="1000000" step="0.01" inputmode="decimal" aria-describedby="evento-ticket-ayuda"><small id="evento-ticket-ayuda">Referencia para mayores. No se define ni calcula el importe de menores.</small></div>
+              </div>
+              <div class="acciones-dialogo"><button id="evento-descartar" type="button" class="boton boton-secundario">Descartar cambios</button><button type="submit" class="boton boton-primario">Guardar configuración</button></div>
+            </fieldset>
+          </form>
+          <p class="configuracion-advertencia"><strong>Para otro evento:</strong> cambiar estos datos no borra ni separa las inscripciones o pagos existentes. Primero exportá el CSV y gestioná la eliminación de los registros anteriores; no se reinician automáticamente.</p>
+        </div>
+      </details>
       <div id="estado-admin" role="status" aria-live="polite" hidden></div>
       <section class="tarjeta listado" aria-labelledby="listado-titulo">
         <div class="listado-encabezado"><div><h2 id="listado-titulo">Inscripciones</h2><p id="resultados" aria-live="polite">Cargando inscripciones…</p></div><button id="exportar" type="button" class="boton boton-secundario boton-pequeno">Exportar CSV ↓</button></div>

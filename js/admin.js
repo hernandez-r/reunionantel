@@ -3,6 +3,7 @@ import { EVENTO } from './config.js';
 import { getFirebase } from './firebase-config.js';
 import { cerrarSesion, iniciarSesion, observarSesion } from './auth.js';
 import { crearFormularioParticipantes } from './formulario.js';
+import { crearEditorEvento } from './configuracion-admin.js';
 import { calcularEstadisticas, contarPersonas, filtrarInscripciones, generarCSV } from './inscripciones.js';
 import { describirError, elemento, mensaje, mostrarEvento, mostrarResumen } from './ui.js';
 
@@ -10,6 +11,7 @@ const $ = (selector) => document.querySelector(selector);
 mostrarEvento();
 let db;
 let editor;
+let editorEvento;
 let registros = [];
 let dejarDeEscuchar;
 let sesionActiva = false;
@@ -28,6 +30,7 @@ function limpiarPanel() {
   sesionActiva = false;
   dejarDeEscuchar?.();
   dejarDeEscuchar = undefined;
+  editorEvento?.detener();
   registros = [];
   expandidos.clear();
   pagosPendientes.clear();
@@ -52,6 +55,7 @@ function limpiarPanel() {
 function escucharInscripciones(usuario) {
   limpiarPanel();
   sesionActiva = true;
+  editorEvento.iniciar();
   const version = versionSesion;
   $('#salir').hidden = false;
   $('#login-campos').disabled = true;
@@ -279,7 +283,7 @@ $('#login-form').addEventListener('submit', async (event) => {
 });
 
 $('#salir').addEventListener('click', async () => {
-  if (guardando || eliminando || pagosPendientes.size) {
+  if (guardando || eliminando || pagosPendientes.size || editorEvento?.estaGuardando()) {
     mensaje($('#estado-admin'), 'Esperá a que termine la operación antes de cerrar sesión.', 'aviso');
     return;
   }
@@ -313,6 +317,7 @@ $('#exportar').addEventListener('click', () => {
 try {
   editor = crearFormularioParticipantes($('#editor-form'), EVENTO.maxInvitados);
   ({ db } = getFirebase());
+  editorEvento = crearEditorEvento(db);
   if (!EVENTO.adminUid || EVENTO.adminUid.includes('REEMPLAZAR')) throw new Error('Falta configurar el UID administrador en js/config.js y firestore.rules.');
   observarSesion({
     onAdmin: escucharInscripciones,

@@ -1,7 +1,6 @@
 """Verificaciones estáticas sin paquetes externos. Ejecutar desde cualquier directorio."""
 from html.parser import HTMLParser
 from pathlib import Path
-from datetime import datetime, timedelta, timezone
 import re
 import sys
 
@@ -77,7 +76,7 @@ for archivo in ROOT.joinpath('js').glob('*.js'):
     verificar('enableIndexedDbPersistence(' not in texto, f'{archivo.name}: caché persistente no prevista')
     verificar('createUserWithEmailAndPassword' not in texto, f'{archivo.name}: creación de cuentas no prevista')
     verificar('.innerHTML' not in texto, f'{archivo.name}: inserción de HTML no prevista')
-    pagina = 'admin.html' if archivo.name in {'admin.js', 'auth.js'} else 'index.html' if archivo.name == 'registro.js' else None
+    pagina = 'admin.html' if archivo.name in {'admin.js', 'auth.js', 'configuracion-admin.js'} else 'index.html' if archivo.name == 'registro.js' else None
     if pagina:
         for selector in re.findall(r"(?:querySelector|\$)\(['\"]#([a-zA-Z][\w-]*)['\"]\)", texto):
             verificar(selector in documentos[pagina].ids, f'{archivo.name}: ID #{selector} no existe en {pagina}')
@@ -92,14 +91,10 @@ config = ROOT.joinpath('js/config.js').read_text()
 verificar('allow read, write: if true' not in reglas, 'Permisos globales abiertos')
 for posicion in range(10):
     verificar(f'invitadoEnPosicionValido(invitados, {posicion})' in reglas, f'Invitado {posicion} sin validar')
-fecha_config = re.search(r"cierreInscripciones:\s*'([^']+)'", config)
-fecha_reglas = re.search(r"timestamp.date\((\d+),\s*(\d+),\s*(\d+)\)\s*\+\s*duration.value\((\d+), 'h'\)", reglas)
-verificar(bool(fecha_config and fecha_reglas), 'No se pudo analizar la configuración del cierre')
-if fecha_config and fecha_reglas:
-    anio, mes, dia, horas = map(int, fecha_reglas.groups())
-    cierre_reglas = datetime(anio, mes, dia, tzinfo=timezone.utc) + timedelta(hours=horas)
-    verificar(datetime.fromisoformat(fecha_config.group(1).replace('Z', '+00:00')) == cierre_reglas,
-              'Plazo de reglas y configuración desincronizado')
+verificar('get(ruta).data.limiteConfirmacion' in reglas and "duration.value(1, 'd')" in reglas,
+          'El cierre debe depender de la configuración guardada, no de una fecha fija')
+verificar('match /configuracion/evento' in reglas and 'esAdmin() && configuracionValida' in reglas,
+          'La configuración debe tener reglas propias y edición privada')
 uid_config = re.search(r"adminUid:\s*'([^']+)'", config)
 uid_reglas = re.search(r"request.auth.uid == '([^']+)'", reglas)
 verificar(bool(uid_config and uid_reglas) and uid_config.group(1) == uid_reglas.group(1), 'UID desincronizado')

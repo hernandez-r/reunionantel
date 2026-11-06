@@ -13,9 +13,46 @@ service cloud.firestore {
     }
 
     function inscripcionAbierta() {
-      // 28/11/2026 03:00 UTC = fin del 27/11 en Uruguay. Límite exclusivo.
-      // Mantener sincronizado con EVENTO.cierreInscripciones en js/config.js.
-      return request.time < timestamp.date(2026, 11, 28) + duration.value(3, 'h');
+      // El plazo viene del mismo documento que lee la página pública.
+      // Sin configuración, las altas públicas quedan cerradas por seguridad.
+      let ruta = /databases/$(database)/documents/configuracion/evento;
+      return exists(ruta)
+        && request.time < get(ruta).data.limiteConfirmacion + duration.value(1, 'd');
+    }
+
+    function diaUruguayValido(fecha) {
+      return fecha is timestamp
+        && fecha >= timestamp.date(2020, 1, 1)
+        && fecha < timestamp.date(2101, 1, 1)
+        && fecha == fecha.date() + duration.value(3, 'h');
+    }
+
+    function textoEventoValido(texto, maximo) {
+      return texto is string && texto.size() >= 3 && texto.size() <= maximo
+        && texto.matches('^[^\\s]+( [^\\s]+)*$');
+    }
+
+    function configuracionValida(datos) {
+      return datos.keys().hasAll(['nombre', 'lugar', 'fecha', 'limiteConfirmacion', 'limitePago', 'ticketCentavos', 'actualizadoEn'])
+        && datos.keys().hasOnly(['nombre', 'lugar', 'fecha', 'limiteConfirmacion', 'limitePago', 'ticketCentavos', 'actualizadoEn'])
+        && textoEventoValido(datos.nombre, 120)
+        && textoEventoValido(datos.lugar, 180)
+        && diaUruguayValido(datos.fecha)
+        && diaUruguayValido(datos.limiteConfirmacion)
+        && diaUruguayValido(datos.limitePago)
+        && datos.limiteConfirmacion <= datos.limitePago
+        && datos.limitePago <= datos.fecha
+        && datos.ticketCentavos is int
+        && datos.ticketCentavos >= 0 && datos.ticketCentavos <= 100000000
+        && datos.actualizadoEn is timestamp
+        && datos.actualizadoEn == request.time;
+    }
+
+    match /configuracion/evento {
+      // Solo estos datos del evento son públicos; nunca las inscripciones.
+      allow get: if true;
+      allow create, update: if esAdmin() && configuracionValida(request.resource.data);
+      allow list, delete: if false;
     }
 
     function nombreValido(nombre) {

@@ -1,10 +1,11 @@
 """Prueba reglas REALES contra un emulador Firestore local, sin SDK ni Node.js.
 
 Requiere el emulador en 127.0.0.1:8787 (README). Nunca apunta a producción.
-Carga variantes de las reglas solo en memoria del emulador para probar el cierre.
+Carga la configuración en el emulador para probar plazos editables y permisos.
 """
 import base64
 import copy
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
@@ -34,10 +35,13 @@ def token(uid):
     }) + '.'
 
 
-def solicitar(metodo, url, datos=None, uid=None):
+def solicitar(metodo, url, datos=None, uid=None, propietario_emulador=False):
     headers = {'Content-Type': 'application/json'}
     if uid:
         headers['Authorization'] = 'Bearer ' + token(uid)
+    if propietario_emulador:
+        # Bypass exclusivo del emulador local para limpiar sus fixtures de configuración.
+        headers['Authorization'] = 'Bearer owner'
     request = Request(url, data=json.dumps(datos).encode() if datos is not None else None,
                       headers=headers, method=metodo)
     try:
@@ -69,12 +73,16 @@ def valor(dato):
         return {'booleanValue': dato}
     if isinstance(dato, str):
         return {'stringValue': dato}
+    if isinstance(dato, datetime):
+        return {'timestampValue': dato.isoformat().replace('+00:00', 'Z')}
     if isinstance(dato, list):
         return {'arrayValue': {'values': [valor(item) for item in dato]}}
     if isinstance(dato, dict):
         return {'mapValue': {'fields': {clave: valor(item) for clave, item in dato.items()}}}
     if isinstance(dato, int):
         return {'integerValue': str(dato)}
+    if isinstance(dato, float):
+        return {'doubleValue': dato}
     return {'nullValue': None}
 
 
@@ -100,12 +108,53 @@ def editar(ruta, datos, uid=None):
                      {'fields': {clave: valor(item) for clave, item in datos.items()}}, uid)
 
 
+def datos_evento(anio=2099):
+    return {
+        'nombre': 'Encuentro de prueba', 'lugar': 'Club Social',
+        'fecha': datetime(anio, 12, 4, 3, tzinfo=timezone.utc),
+        'limiteConfirmacion': datetime(anio, 11, 27, 3, tzinfo=timezone.utc),
+        'limitePago': datetime(anio, 12, 1, 3, tzinfo=timezone.utc),
+        'ticketCentavos': 100000,
+    }
+
+
+def configurar(datos=None, uid=UID_ADMIN, servidor=True):
+    campos = {clave: valor(item) for clave, item in (datos if datos is not None else datos_evento()).items()}
+    escritura = {'update': {'name': NOMBRE_BASE + '/configuracion/evento', 'fields': campos}}
+    if servidor:
+        escritura['updateTransforms'] = [{'fieldPath': 'actualizadoEn', 'setToServerValue': 'REQUEST_TIME'}]
+    else:
+        campos['actualizadoEn'] = {'timestampValue': '2020-01-01T00:00:00Z'}
+    return solicitar('POST', BASE + ':commit', {'writes': [escritura]}, uid)
+
+
 try:
     # Compila primero los archivos tal como se entregan, sin modificar producción.
     cargar_reglas(ORIGINALES)
-    abiertas = re.sub(r'timestamp.date\(\d+,\s*\d+,\s*\d+\)', 'timestamp.date(2099, 11, 28)', ORIGINALES)
-    cerradas = re.sub(r'timestamp.date\(\d+,\s*\d+,\s*\d+\)', 'timestamp.date(2000, 11, 28)', ORIGINALES)
-    cargar_reglas(abiertas)
+    solicitar('DELETE', BASE + '/configuracion/evento', propietario_emulador=True)
+    comprobar('Sin configuración no se puede crear una inscripción pública', nueva()[0], 403)
+    comprobar('Administrador puede registrar manualmente sin configuración', nueva(uid=UID_ADMIN)[0])
+    comprobar('Público no puede crear configuración', configurar(uid=None), 403)
+    comprobar('UID distinto no puede crear configuración', configurar(uid='no-autorizado'), 403)
+    comprobar('Administrador crea configuración del evento', configurar())
+    comprobar('Público puede leer solamente el documento del evento', solicitar('GET', BASE + '/configuracion/evento'))
+    comprobar('Público no puede listar la colección de configuración', solicitar('GET', BASE + '/configuracion'), 403)
+    comprobar('Público no puede leer otro documento de configuración', solicitar('GET', BASE + '/configuracion/privada'), 403)
+    comprobar('Público no puede modificar el ticket', configurar({**datos_evento(), 'ticketCentavos': 1}, uid=None), 403)
+    comprobar('UID distinto no puede modificar la configuración', configurar(uid='no-autorizado'), 403)
+    comprobar('Administrador no puede borrar la configuración', solicitar('DELETE', BASE + '/configuracion/evento', uid=UID_ADMIN), 403)
+    comprobar('Configuración rechaza campo extra', configurar({**datos_evento(), 'adminUid': 'intruso'}), 403)
+    comprobar('Configuración rechaza campo faltante', configurar({clave: dato for clave, dato in datos_evento().items() if clave != 'nombre'}), 403)
+    comprobar('Configuración rechaza título vacío', configurar({**datos_evento(), 'nombre': ''}), 403)
+    comprobar('Configuración rechaza lugar demasiado largo', configurar({**datos_evento(), 'lugar': 'x' * 181}), 403)
+    comprobar('Configuración rechaza ticket negativo', configurar({**datos_evento(), 'ticketCentavos': -1}), 403)
+    comprobar('Configuración rechaza centavos fraccionarios', configurar({**datos_evento(), 'ticketCentavos': 100.5}), 403)
+    comprobar('Configuración rechaza importe excesivo', configurar({**datos_evento(), 'ticketCentavos': 100000001}), 403)
+    comprobar('Configuración rechaza fecha como texto', configurar({**datos_evento(), 'fecha': '2099-12-04'}), 403)
+    comprobar('Configuración exige medianoche de Uruguay', configurar({**datos_evento(), 'fecha': datetime(2099, 12, 4, tzinfo=timezone.utc)}), 403)
+    comprobar('Configuración rechaza confirmación posterior al pago', configurar({**datos_evento(), 'limiteConfirmacion': datetime(2099, 12, 2, 3, tzinfo=timezone.utc)}), 403)
+    comprobar('Configuración rechaza pago posterior al evento', configurar({**datos_evento(), 'limitePago': datetime(2099, 12, 5, 3, tzinfo=timezone.utc)}), 403)
+    comprobar('Actualización del evento exige timestamp del servidor', configurar(servidor=False), 403)
     respuesta, ruta = nueva()
     comprobar('Público crea titular solo con serverTimestamp', respuesta)
     invitado = {'nombre': 'María López', 'tipo': 'mayor'}
@@ -153,14 +202,18 @@ try:
                  'updateTransforms': [{'fieldPath': 'fechaRegistro', 'setToServerValue': 'REQUEST_TIME'}]}
     comprobar('Administrador no cambia fechaRegistro', solicitar('POST', BASE + ':commit', {'writes': [escritura]}, UID_ADMIN), 403)
     comprobar('Administrador no agrega campos extra', editar(ruta, {'total': 15}, UID_ADMIN), 403)
-    cargar_reglas(cerradas)
+    comprobar('Administrador cambia lugar y precio', configurar({**datos_evento(), 'lugar': 'Otro Club', 'ticketCentavos': 125050}))
+    comprobar('Administrador cambia el plazo a un evento pasado', configurar(datos_evento(2020)))
     comprobar('Cierre rechaza alta pública válida', nueva(grupo)[0], 403)
     comprobar('Cierre también rechaza UID no autorizado', nueva(grupo, uid='no-autorizado')[0], 403)
     comprobar('Administrador puede crear después del cierre', nueva(grupo, uid=UID_ADMIN)[0])
+    comprobar('Administrador reabre el plazo desde la configuración', configurar())
+    comprobar('Reabrir el plazo permite nuevamente el registro público', nueva()[0])
     comprobar('Administrador puede borrar', solicitar('DELETE', BASE + '/' + ruta, uid=UID_ADMIN))
     print(f'\n{aprobadas} pruebas de reglas aprobadas contra Firestore Emulator.')
 finally:
     # Solo este proyecto demo del emulador, nunca producción. Restaurar reglas originales.
     for ruta_creada in creados:
         solicitar('DELETE', BASE + '/' + ruta_creada, uid=UID_ADMIN)
+    solicitar('DELETE', BASE + '/configuracion/evento', propietario_emulador=True)
     cargar_reglas(ORIGINALES)

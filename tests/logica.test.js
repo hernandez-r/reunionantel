@@ -1,5 +1,6 @@
 import { normalizarNombre, nombreValido, validarInscripcion, contarPersonas, calcularEstadisticas, filtrarInscripciones, generarCSV } from '../js/inscripciones.js';
-import { EVENTO, inscripcionesAbiertas } from '../js/config.js';
+import { EVENTO, EVENTO_INICIAL, aplicarEvento, inscripcionesAbiertas, importeLegible } from '../js/config.js';
+import { fechaValida, inicioDiaUruguay, cierreDelDia, validarConfiguracionEvento, configuracionADocumento, configuracionDesdeDocumento } from '../js/evento-datos.js';
 import { crearFormularioParticipantes } from '../js/formulario.js';
 
 let aprobadas = 0;
@@ -78,6 +79,49 @@ prueba('Plazo cerrado exactamente al cierre y después', () => {
   igual(inscripcionesAbiertas(new Date(EVENTO.cierreInscripciones)), false);
   igual(inscripcionesAbiertas(new Date(Date.parse(EVENTO.cierreInscripciones) + 1)), false);
 });
+
+const evento = {
+  nombre: 'Encuentro de primavera', lugar: 'Club Social', fecha: '2028-10-20',
+  limiteConfirmacion: '2028-10-10', limitePago: '2028-10-15', ticketReferencia: 1250.5,
+};
+prueba('Configuración del evento válida', () => igual(validarConfiguracionEvento(evento), ''));
+prueba('Rechaza fechas inexistentes y formatos distintos', () => {
+  ['2027-02-29', '2028-02-30', '20/10/2028', '', '2019-12-31', '2101-01-01'].forEach((fecha) => igual(fechaValida(fecha), false));
+});
+prueba('Admite fecha bisiesta válida', () => igual(fechaValida('2028-02-29'), true));
+prueba('Día de Uruguay independiente del huso del navegador', () => igual(inicioDiaUruguay('2028-10-10').toISOString(), '2028-10-10T03:00:00.000Z'));
+prueba('Cierre al terminar el día, incluso al cambiar de año', () => igual(cierreDelDia('2028-12-31'), '2029-01-01T03:00:00.000Z'));
+prueba('Rechaza confirmación posterior al pago', () => igual(Boolean(validarConfiguracionEvento({ ...evento, limiteConfirmacion: '2028-10-16' })), true));
+prueba('Rechaza pago posterior al encuentro', () => igual(Boolean(validarConfiguracionEvento({ ...evento, limitePago: '2028-10-21' })), true));
+prueba('Admite plazos en el mismo día del encuentro', () => igual(validarConfiguracionEvento({ ...evento, limiteConfirmacion: evento.fecha, limitePago: evento.fecha }), ''));
+prueba('Rechaza nombre y lugar vacíos o demasiado largos', () => {
+  igual(Boolean(validarConfiguracionEvento({ ...evento, nombre: '' })), true);
+  igual(Boolean(validarConfiguracionEvento({ ...evento, lugar: 'x'.repeat(181) })), true);
+});
+prueba('Rechaza ticket inválido, negativo o con más de dos decimales', () => {
+  [-1, NaN, Infinity, 1000001, 12.345].forEach((ticketReferencia) => igual(Boolean(validarConfiguracionEvento({ ...evento, ticketReferencia })), true));
+});
+prueba('Permite ticket cero y precio con dos decimales', () => {
+  [0, 0.29, 1000000, 1250.5].forEach((ticketReferencia) => igual(validarConfiguracionEvento({ ...evento, ticketReferencia }), ''));
+});
+prueba('Persiste el costo en centavos enteros', () => igual(configuracionADocumento(evento).ticketCentavos, 125050));
+prueba('Conversión del documento conserva todas las fechas y el importe', () => igual(configuracionDesdeDocumento(configuracionADocumento(evento)), evento));
+prueba('Rechaza documentos con fechas que no son medianoche de Uruguay', () => {
+  let rechazo = false;
+  try { configuracionDesdeDocumento({ ...configuracionADocumento(evento), fecha: new Date('2028-10-20T00:00:00Z') }); }
+  catch { rechazo = true; }
+  igual(rechazo, true);
+});
+prueba('Cambiar la configuración actualiza el cierre usado por la aplicación', () => {
+  try {
+    aplicarEvento(evento);
+    igual(EVENTO.lugar, evento.lugar);
+    igual(inscripcionesAbiertas(new Date('2028-10-11T02:59:59Z')), true);
+    igual(inscripcionesAbiertas(new Date('2028-10-11T03:00:00Z')), false);
+    igual(EVENTO.adminUid, EVENTO_INICIAL.adminUid);
+  } finally { aplicarEvento(EVENTO_INICIAL); }
+});
+prueba('El ticket con decimales no se redondea en pantalla', () => igual(importeLegible(1250.5).includes(',50'), true));
 
 // Ejercita el editor DOM real, no una copia de su lógica.
 function conEditor(ejecutar, maximo = 10) {

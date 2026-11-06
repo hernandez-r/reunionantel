@@ -13,6 +13,10 @@ export function mostrarEvento() {
   document.querySelectorAll('[data-evento]').forEach((elemento) => {
     elemento.textContent = valores[elemento.dataset.evento] ?? '';
   });
+  const administracion = document.body.classList.contains('pagina-admin');
+  document.title = administracion ? `Administración · ${EVENTO.nombre}` : `${EVENTO.nombre} · Inscripciones`;
+  const descripcion = document.querySelector('meta[name="description"]');
+  if (descripcion) descripcion.content = `Confirmá tu asistencia a ${EVENTO.nombre} en ${EVENTO.lugar}.`;
 }
 
 export function mensaje(elemento, texto = '', tipo = 'info') {

@@ -218,6 +218,26 @@ input[type='checkbox'] { accent-color: var(--azul); width: 17px; height: 17px; m
 .vacio strong { font-size: .95rem; }
 .vacio p { font-size: .85rem; color: var(--secundario); margin-top: 8px; }
 
+/* Ajustes del evento: plegados por defecto para no desplazar la lista de asistentes. */
+.configuracion-evento { margin-bottom: 28px; overflow: hidden; }
+.configuracion-evento summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 22px 26px; cursor: pointer; list-style: none; }
+.configuracion-evento summary::-webkit-details-marker { display: none; }
+.configuracion-evento summary > span:first-child { min-width: 0; }
+.configuracion-evento summary strong { display: block; font-size: 1.05rem; letter-spacing: -.025em; }
+.configuracion-evento summary small { display: block; color: var(--secundario); margin-top: 4px; font-size: .76rem; }
+.configuracion-evento summary:hover { background: #f8faff; }
+.configuracion-indicador { display: inline-flex; gap: 10px; align-items: center; color: var(--azul); font-size: .8rem; font-weight: 600; flex-shrink: 0; }
+.configuracion-indicador > span { font-size: 1.2rem; }
+.configuracion-evento[open] .configuracion-indicador > span { transform: rotate(180deg); }
+.configuracion-contenido { padding: 0 26px 24px; }
+.configuracion-contenido > .nota { border-top: 1px solid var(--borde); padding-top: 18px; margin-bottom: 20px; }
+.configuracion-grilla { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 20px; }
+.configuracion-grilla .campo { margin: 0; grid-column: span 2; }
+.configuracion-grilla .campo:nth-child(-n + 2) { grid-column: span 3; }
+.configuracion-grilla .campo:last-child { max-width: 370px; }
+.configuracion-grilla input[type='date'] { min-width: 0; }
+.configuracion-advertencia { margin-top: 22px; padding: 14px 16px; background: #fff9ec; border: 1px solid #eadfc5; border-radius: 8px; color: #755117; font-size: .78rem; }
+
 /* Dialog nativo: foco, teclado y bloqueo de fondo sin dependencias. */
 dialog { background: white; color: var(--texto); padding: 0; width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 40px); border: 1px solid var(--borde); border-radius: 16px; box-shadow: 0 24px 80px #0003; }
 dialog::backdrop { background: #102653a8; backdrop-filter: blur(3px); }
@@ -270,6 +290,12 @@ dialog::backdrop { background: #102653a8; backdrop-filter: blur(3px); }
   .listado-encabezado { padding: 20px 20px 0; gap: 10px; }
   .listado-encabezado .boton { font-size: .68rem; padding-inline: 10px; }
   .pie-listado { padding-inline: 20px; }
+  .configuracion-evento summary { padding: 20px; }
+  .configuracion-contenido { padding: 0 20px 20px; }
+  .configuracion-grilla { grid-template-columns: 1fr; gap: 16px; }
+  .configuracion-grilla .campo { grid-column: auto; }
+  .configuracion-grilla .campo:nth-child(-n + 2), .configuracion-grilla .campo:last-child { grid-column: auto; max-width: none; }
+  .configuracion-evento .acciones-dialogo .boton { flex: 1 1 180px; }
   .pie { font-size: .68rem; }
 }
 @media (max-width: 390px) {
