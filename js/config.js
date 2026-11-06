@@ -13,7 +13,7 @@ export const EVENTO = Object.freeze({
   // Entre 0 y 10. Sincronizar con maxInvitados() en firestore.rules.
   maxInvitados: 10,
   // UID de Authentication, NO el correo ni una contraseña. Copiar también en las reglas.
-  adminUid: 'REEMPLAZAR_UID_ADMIN',
+  adminUid: 'ZM7oO3DxIqYFWnGLYANS9s6Erar1',
 });
 
 export function inscripcionesAbiertas(ahora = new Date()) {
