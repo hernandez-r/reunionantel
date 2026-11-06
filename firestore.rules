@@ -4,7 +4,7 @@ service cloud.firestore {
     function esAdmin() {
       // Reemplazar por el UID exacto de Authentication; nunca por correo o contraseña.
       return request.auth != null
-        && request.auth.uid == 'REEMPLAZAR_UID_ADMIN';
+        && request.auth.uid == 'ZM7oO3DxIqYFWnGLYANS9s6Erar1';
     }
 
     function maxInvitados() {
