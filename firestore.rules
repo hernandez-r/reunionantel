@@ -2,9 +2,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function esAdmin() {
-      // Reemplazar por el UID exacto de Authentication; nunca por correo o contraseña.
+      // Una entrada por administrador. Mantener igual a EVENTO_INICIAL.adminUids.
+      // Usar los UID exactos de Authentication, nunca correos ni contraseñas.
       return request.auth != null
-        && request.auth.uid == 'ZM7oO3DxIqYFWnGLYANS9s6Erar1';
+        && request.auth.uid in [
+          'ZM7oO3DxIqYFWnGLYANS9s6Erar1',
+          'S3eBI2LIZGQIMzZA7fO7uwI9d3x1',
+          'InNMTCkTbrW6jTvOBiSQUijARx23',
+        ];
     }
 
     function maxInvitados() {

@@ -95,9 +95,19 @@ verificar('get(ruta).data.limiteConfirmacion' in reglas and "duration.value(1, '
           'El cierre debe depender de la configuración guardada, no de una fecha fija')
 verificar('match /configuracion/evento' in reglas and 'esAdmin() && configuracionValida' in reglas,
           'La configuración debe tener reglas propias y edición privada')
-uid_config = re.search(r"adminUid:\s*'([^']+)'", config)
-uid_reglas = re.search(r"request.auth.uid == '([^']+)'", reglas)
-verificar(bool(uid_config and uid_reglas) and uid_config.group(1) == uid_reglas.group(1), 'UID desincronizado')
+uids_config = re.search(r'adminUids:\s*Object\.freeze\(\s*\[([^\]]*)\]', config)
+uids_reglas = re.search(r'request.auth.uid in\s*\[([^\]]*)\]', reglas)
+verificar(bool(uids_config and uids_reglas), 'Falta la lista de UID administradores')
+if uids_config and uids_reglas:
+    extraer = lambda texto: re.findall(r'''['"]([^'"]*)['"]''', texto)
+    lista_config = extraer(uids_config.group(1))
+    lista_reglas = extraer(uids_reglas.group(1))
+    verificar(bool(lista_config) and all(uid and uid == uid.strip() and len(uid) <= 128
+              and 'REEMPLAZAR' not in uid and not uid.startswith('UID_REAL_')
+              for uid in lista_config), 'Hay UID vacíos, inválidos o sin completar')
+    verificar(len(set(lista_config)) == len(lista_config), 'Hay UID administradores duplicados')
+    verificar(len(set(lista_reglas)) == len(lista_reglas), 'Hay UID duplicados en las reglas')
+    verificar(set(lista_config) == set(lista_reglas), 'Las listas de UID de JavaScript y reglas están desincronizadas')
 max_config = re.search(r'maxInvitados:\s*(\d+)', config)
 max_reglas = re.search(r'function maxInvitados\(\)\s*\{[^}]*return (\d+);', reglas)
 verificar(bool(max_config and max_reglas) and max_config.group(1) == max_reglas.group(1)

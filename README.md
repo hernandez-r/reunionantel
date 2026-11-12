@@ -2,7 +2,7 @@
 
 Aplicación estática en HTML, CSS y JavaScript Vanilla. Formulario público, administración privada con Firebase Authentication y datos en Cloud Firestore. Sin Node.js, frameworks, compilación, servidor de aplicación ni dependencias instalables.
 
-**Antes de usarla:** revisar la configuración pública de Firebase y el UID, publicar las reglas actualizadas y guardar la configuración del evento desde el panel. No se incluyen contraseñas ni credenciales de servicio.
+**Antes de usarla:** revisar la configuración pública de Firebase y la lista de UID administradores, publicar las reglas actualizadas y guardar la configuración del evento desde el panel. No se incluyen contraseñas ni credenciales de servicio.
 
 ## Qué incluye
 
@@ -51,18 +51,52 @@ tests/                     Pruebas de lógica en navegador y revisión estática
 3. No es necesario crear colecciones manualmente: `configuracion/evento` se crea al guardar los ajustes desde el panel e `inscripciones` con la primera inscripción válida.
 4. No se necesitan índices compuestos: el administrador escucha la colección y filtra/ordena en memoria. Es apropiado para una reunión pequeña, no para millones de registros.
 
-## 3. Crear la cuenta administradora
+## 3. Crear y autorizar las cuentas administradoras
 
 1. Abrí **Compilación → Authentication → Comenzar**.
 2. En **Método de acceso / Sign-in method**, habilitá **Correo electrónico/contraseña (Email/Password)**. No hace falta habilitar acceso por enlace de correo ni acceso anónimo.
-3. En **Usuarios → Agregar usuario**, creá manualmente el correo y una contraseña segura. Comunicá la contraseña por un canal privado, no por el repositorio.
-4. Copiá su **UID** desde la tabla/detalle del usuario.
-5. Reemplazá `REEMPLAZAR_UID_ADMIN` por ese UID en **ambos** archivos:
-   - `js/config.js` → `EVENTO.adminUid` (control de interfaz).
-   - `firestore.rules` → `esAdmin()` (protección real).
-6. La aplicación no expone registro de cuentas. Firebase Email/Password puede permitir que alguien cree una cuenta usando su API: **tener una cuenta no da acceso**; las reglas aceptan solamente el UID configurado. No se usa el correo como autorización.
+3. En **Usuarios → Agregar usuario**, creá manualmente cada cuenta con correo y contraseña segura. Comunicá las contraseñas por un canal privado, no por el repositorio.
+4. Copiá el **UID** de cada administrador desde la tabla/detalle del usuario. No copies el correo, ID de la app ni ID del proyecto.
+5. Agregá todos los UID autorizados, uno por entrada, en **ambos** archivos:
+   - `js/config.js` → `EVENTO_INICIAL.adminUids` (control de interfaz).
+   - `firestore.rules` → la lista de `esAdmin()` (protección real).
+6. La aplicación no expone registro de cuentas. Firebase Email/Password puede permitir que alguien cree una cuenta usando su API: **tener una cuenta no da acceso al panel**; las reglas aceptan solo los UID incluidos en la lista. Todos los administradores de la lista tienen los mismos permisos. No se usa el correo como autorización.
 7. En **Authentication → Configuración → Dominios autorizados**, agregá `localhost` para pruebas y `usuario.github.io` para producción (sin `https://` ni el nombre del repositorio). Firebase ya no siempre incluye `localhost` automáticamente.
 8. Recomendado: activar protección contra enumeración de correos y política de contraseñas en Authentication.
+
+### Agregar dos administradores más
+
+La lista del proyecto conserva al administrador actual. Completá los otros dos UID reales de Authentication en `js/config.js`:
+
+```js
+adminUids: Object.freeze([
+  'ZM7oO3DxIqYFWnGLYANS9s6Erar1',
+  'UID_REAL_DEL_SEGUNDO_USUARIO',
+  'UID_REAL_DEL_TERCER_USUARIO',
+]),
+```
+
+En `firestore.rules`, mantené exactamente los mismos UID:
+
+```js
+function esAdmin() {
+  return request.auth != null
+    && request.auth.uid in [
+      'ZM7oO3DxIqYFWnGLYANS9s6Erar1',
+      'UID_REAL_DEL_SEGUNDO_USUARIO',
+      'UID_REAL_DEL_TERCER_USUARIO',
+    ];
+}
+```
+
+Los dos valores `UID_REAL_…` son ejemplos: reemplazalos, no los publiques como están. No borres el UID actual salvo que quieras revocarle acceso. Después:
+
+1. Ejecutá `python3 tests/verificar.py` para detectar listas diferentes, vacías o duplicadas.
+2. Publicá **todo** `firestore.rules` en Firebase Console → Firestore Database → Reglas del mismo proyecto.
+3. Subí los archivos actualizados a GitHub Pages, esperá el despliegue y recargá sin caché.
+4. Probá el acceso de cada administrador y el rechazo de una cuenta que no figure en las listas.
+
+Crear usuarios en Authentication **no modifica las listas** ni publica las reglas. Si agregás un UID solo a JavaScript, Firestore lo rechazará; si lo agregás solo a las reglas, el control de interfaz no lo dejará entrar. Para revocar un administrador, quitalo de ambas listas y publicá ambos cambios. Las listas de administradores no se gestionan desde la configuración pública del evento.
 
 ## 4. Configurar evento y publicar reglas
 
@@ -94,10 +128,10 @@ Hay dos valores técnicos que siguen teniendo su equivalente en `firestore.rules
 
 | Configuración de interfaz | Reglas del servidor |
 | --- | --- |
-| `EVENTO.adminUid` | `esAdmin()` |
+| `EVENTO_INICIAL.adminUids` | Lista de UID de `esAdmin()` |
 | `EVENTO.maxInvitados` (entero entre 0 y 10) | `maxInvitados()` |
 
-**Mantenelos sincronizados y volvé a publicar las reglas al cambiarlos.** El UID, la moneda UYU, el huso de Uruguay y el máximo de invitados no se editan desde el formulario público ni desde los ajustes del evento.
+**Mantenelos sincronizados y volvé a publicar las reglas al cambiarlos.** Los UID autorizados, la moneda UYU, el huso de Uruguay y el máximo de invitados no se editan desde el formulario público ni desde los ajustes del evento.
 
 El máximo de seguridad soportado es 10: Firestore Rules no permite recorrer listas con bucles; por eso se valida explícitamente cada una de las 10 posiciones posibles. Reducir el máximo solo requiere cambiar los dos valores. Aumentarlo exige extender también las validaciones de reglas y el editor; no alcanza con cambiar un número.
 
@@ -233,7 +267,7 @@ En otra terminal:
 python3 tests/firestore.test.py
 ```
 
-La prueba usa exclusivamente `127.0.0.1:8787` y el proyecto ficticio `demo-reunion-test`. Verifica compilación de las reglas, altas anónimas, todos los invitados, límites, campos inesperados, lecturas prohibidas, pago público denegado, permisos del admin y fecha inmutable. También comprueba lectura pública de los ajustes, edición privada, fechas, precio y cierre/reapertura cambiando el documento del evento **solo dentro del emulador**. Restaura reglas y limpia sus documentos al terminar; nunca edita `firestore.rules` ni accede a producción. Los tokens ficticios solo son aceptados por el emulador. No uses este emulador como servidor de la aplicación publicada ni ejecutes esta suite sobre un emulador con datos que quieras conservar: administra el documento de configuración del proyecto demo.
+La prueba usa exclusivamente `127.0.0.1:8787` y el proyecto ficticio `demo-reunion-test`. Verifica compilación de las reglas, altas anónimas, todos los invitados, límites, campos inesperados, lecturas prohibidas, pago público denegado, permisos del admin y fecha inmutable. Habilita **dos UID ficticios adicionales únicamente en la memoria del emulador** para verificar que varios administradores pueden consultar, editar, crear, eliminar, cambiar pagos y guardar ajustes, mientras otras cuentas siguen bloqueadas. También comprueba lectura pública de los ajustes, fechas, precio y cierre/reapertura cambiando el documento del evento solo dentro del emulador. Restaura reglas y limpia sus documentos al terminar; nunca edita `firestore.rules` ni accede a producción. Los tokens ficticios solo son aceptados por el emulador. No uses este emulador como servidor de la aplicación publicada ni ejecutes esta suite sobre un emulador con datos que quieras conservar: administra el documento de configuración del proyecto demo.
 
 ### Integración contra Firebase (realizar manualmente)
 
@@ -253,6 +287,7 @@ Usá un proyecto de prueba y nombres ficticios; luego borrá esos datos desde el
 | Crear fuera de plazo con reloj local atrasado | Denegado por request.time |
 | Abrir admin sin sesión | Solo login, sin listener ni tabla privada |
 | Usuario autenticado con UID distinto | Cierra esa sesión y no accede a Firestore |
+| Segundo y tercer administrador incluidos en ambas listas | Acceden a los mismos datos, pagos y ajustes; no se autorizan otras cuentas por estar registradas |
 | Administrador correcto: login, recarga y logout | Acceso autorizado; sesión de pestaña restaurada; datos borrados de la interfaz al salir |
 | Marcar/desmarcar pago | Persistencia inmediata, colores y tarjetas de personas actualizados |
 | Editar titular/invitado/categoría, agregar y quitar invitado | Cambios persistidos, totales actualizados, fecha y pago conservados |
@@ -279,9 +314,9 @@ Casos negativos adicionales: documento sin un campo, `pagado: 'false'`, `invitad
 
 **Verificado durante la implementación:**
 
-- 640 comprobaciones estáticas aprobadas.
-- 50 pruebas de lógica, fechas, precio y editor DOM aprobadas en Chromium.
-- 76 comprobaciones aprobadas contra Firestore Emulator, incluidos los permisos del documento de ajustes, sus validaciones y el cierre/reapertura desde la configuración; además se comprobó la restauración de reglas al finalizar.
+- 646 comprobaciones estáticas aprobadas, incluida la sincronización de las listas de administradores.
+- 55 pruebas de lógica, autorización por lista, fechas, precio y editor DOM aprobadas en Chromium.
+- 94 comprobaciones aprobadas contra Firestore Emulator, incluidos tres administradores, rechazo de otras cuentas, permisos del documento de ajustes, validaciones y cierre/reapertura desde la configuración; además se comprobó la restauración de reglas al finalizar. Los UID de los dos administradores adicionales eran ficticios y solo se habilitaron en el emulador.
 - Flujo público con el SDK real contra el emulador: grupo de cuatro personas, revisión, guardado, código y bloqueo de doble clic.
 - Dashboard con SDK real y emulador: consulta, pago del grupo, quitar invitado, actualización en vivo, eliminación confirmada y limpieza al salir. **La frontera de Authentication fue simulada en esta prueba de interfaz**, no se comprobó un login de producción.
 - Ajustes con SDK real y emulador: primer guardado, actualización de una página pública abierta, precio con decimales, plazos dinámicos, conservación de inscripciones, confirmación reabierta ante cambios y rechazo de edición concurrente. Revisión del formulario de ajustes a 360 y 1440 px, sin desbordes. No se realizaron escrituras en producción.
@@ -293,7 +328,7 @@ Casos negativos adicionales: documento sin un campo, `pagado: 'false'`, `invitad
 
 - **Falta configurar Firebase / UID:** reemplazá marcadores en los archivos indicados.
 - **`permission-denied` al inscribirse:** verificá que las reglas completas estén publicadas en el proyecto y base `(default)` usados por la app; revisá fecha del servidor y tipos/campos. Esta versión no usa App Check: si lo exigís desde Console, desactivá esa exigencia según el apartado 5.
-- **`permission-denied` al administrar:** compará el UID de la cuenta con las reglas y `js/config.js`.
+- **Cuenta no autorizada / `permission-denied` al administrar:** verificá que el UID de esa cuenta figure en `EVENTO_INICIAL.adminUids` y en la lista de `esAdmin()` de las reglas publicadas. Crear la cuenta en Authentication no le concede permisos administrativos.
 - **Credenciales inválidas:** revisá la cuenta creada manualmente y proveedor Email/Password. No publiques claves de acceso para depurar.
 - **Carga infinita / red fallida:** revisá conectividad, bloqueo de gstatic/googleapis y dominios autorizados; no cierres una escritura pendiente sin verificarla luego en Console.
 - **Cambiaste ajustes pero no se refleja:** confirmá que guardaste desde el panel y que se usa el mismo proyecto Firebase. Los cambios de nombre, fechas, lugar y ticket no requieren desplegar de nuevo. Para cambios de código, esperá el despliegue de Pages y recargá sin caché; para cambios de reglas, publicalas por separado en Console.

@@ -1,5 +1,5 @@
 import { normalizarNombre, nombreValido, validarInscripcion, contarPersonas, calcularEstadisticas, filtrarInscripciones, generarCSV } from '../js/inscripciones.js';
-import { EVENTO, EVENTO_INICIAL, aplicarEvento, inscripcionesAbiertas, importeLegible } from '../js/config.js';
+import { EVENTO, EVENTO_INICIAL, aplicarEvento, inscripcionesAbiertas, importeLegible, esUidAdministrador, listaAdministradoresValida } from '../js/config.js';
 import { fechaValida, inicioDiaUruguay, cierreDelDia, validarConfiguracionEvento, configuracionADocumento, configuracionDesdeDocumento } from '../js/evento-datos.js';
 import { crearFormularioParticipantes } from '../js/formulario.js';
 
@@ -118,10 +118,33 @@ prueba('Cambiar la configuración actualiza el cierre usado por la aplicación',
     igual(EVENTO.lugar, evento.lugar);
     igual(inscripcionesAbiertas(new Date('2028-10-11T02:59:59Z')), true);
     igual(inscripcionesAbiertas(new Date('2028-10-11T03:00:00Z')), false);
-    igual(EVENTO.adminUid, EVENTO_INICIAL.adminUid);
+    igual(EVENTO.adminUids, EVENTO_INICIAL.adminUids);
   } finally { aplicarEvento(EVENTO_INICIAL); }
 });
 prueba('El ticket con decimales no se redondea en pantalla', () => igual(importeLegible(1250.5).includes(',50'), true));
+
+prueba('La lista admite tres administradores distintos', () => {
+  const uids = ['admin-uno', 'admin-dos', 'admin-tres'];
+  igual(listaAdministradoresValida(uids), true);
+  uids.forEach((uid) => igual(esUidAdministrador(uid, uids), true));
+  EVENTO.adminUids.forEach((uid) => igual(esUidAdministrador(uid), true));
+});
+prueba('Una cuenta autenticada fuera de la lista no es administradora', () => igual(esUidAdministrador('otro-usuario', ['admin-uno', 'admin-dos', 'admin-tres']), false));
+prueba('No autoriza visitantes ni UID vacíos', () => {
+  [null, undefined, '', 123].forEach((uid) => igual(esUidAdministrador(uid), false));
+});
+prueba('Detecta listas vacías, duplicadas o sin completar', () => {
+  [[], [''], ['admin-uno', 'admin-uno'], ['REEMPLAZAR_UID'], ['UID_REAL_DEL_SEGUNDO_USUARIO'], [' uid '], ['x'.repeat(129)], 'admin-uno', null]
+    .forEach((uids) => igual(listaAdministradoresValida(uids), false));
+});
+prueba('La configuración pública del evento no puede cambiar administradores', () => {
+  try {
+    aplicarEvento({ ...evento, adminUids: ['intruso'] });
+    igual(EVENTO.adminUids, EVENTO_INICIAL.adminUids);
+    igual(esUidAdministrador('intruso'), false);
+    igual(Object.isFrozen(EVENTO.adminUids), true);
+  } finally { aplicarEvento(EVENTO_INICIAL); }
+});
 
 // Ejercita el editor DOM real, no una copia de su lógica.
 function conEditor(ejecutar, maximo = 10) {

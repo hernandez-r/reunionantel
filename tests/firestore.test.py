@@ -19,7 +19,13 @@ PROYECTO = 'demo-reunion-test'
 BASE = f'{HOST}/v1/projects/{PROYECTO}/databases/(default)/documents'
 NOMBRE_BASE = f'projects/{PROYECTO}/databases/(default)/documents'
 ORIGINALES = Path(__file__).resolve().parents[1].joinpath('firestore.rules').read_text()
-UID_ADMIN = re.search(r"request.auth.uid == '([^']+)'", ORIGINALES).group(1)
+LISTA_UID = re.search(r'request.auth.uid in\s*\[([^\]]*)\]', ORIGINALES)
+UIDS_CONFIGURADOS = re.findall(r'''['"]([^'"]+)['"]''', LISTA_UID.group(1))
+UID_ADMIN = UIDS_CONFIGURADOS[0]
+# Estos dos UID ficticios se habilitan SOLO en la memoria del emulador.
+UIDS_PRUEBA = list(dict.fromkeys([*UIDS_CONFIGURADOS, 'admin-adicional-prueba-2', 'admin-adicional-prueba-3']))
+REGLAS_PRUEBA = re.sub(r'request.auth.uid in\s*\[[^\]]*\]',
+                      'request.auth.uid in ' + json.dumps(UIDS_PRUEBA), ORIGINALES, count=1)
 creados = []
 aprobadas = 0
 
@@ -131,6 +137,7 @@ def configurar(datos=None, uid=UID_ADMIN, servidor=True):
 try:
     # Compila primero los archivos tal como se entregan, sin modificar producción.
     cargar_reglas(ORIGINALES)
+    cargar_reglas(REGLAS_PRUEBA)
     solicitar('DELETE', BASE + '/configuracion/evento', propietario_emulador=True)
     comprobar('Sin configuración no se puede crear una inscripción pública', nueva()[0], 403)
     comprobar('Administrador puede registrar manualmente sin configuración', nueva(uid=UID_ADMIN)[0])
@@ -144,6 +151,7 @@ try:
     comprobar('UID distinto no puede modificar la configuración', configurar(uid='no-autorizado'), 403)
     comprobar('Administrador no puede borrar la configuración', solicitar('DELETE', BASE + '/configuracion/evento', uid=UID_ADMIN), 403)
     comprobar('Configuración rechaza campo extra', configurar({**datos_evento(), 'adminUid': 'intruso'}), 403)
+    comprobar('La configuración del evento no permite cambiar la lista de administradores', configurar({**datos_evento(), 'adminUids': ['intruso']}), 403)
     comprobar('Configuración rechaza campo faltante', configurar({clave: dato for clave, dato in datos_evento().items() if clave != 'nombre'}), 403)
     comprobar('Configuración rechaza título vacío', configurar({**datos_evento(), 'nombre': ''}), 403)
     comprobar('Configuración rechaza lugar demasiado largo', configurar({**datos_evento(), 'lugar': 'x' * 181}), 403)
@@ -202,11 +210,22 @@ try:
                  'updateTransforms': [{'fieldPath': 'fechaRegistro', 'setToServerValue': 'REQUEST_TIME'}]}
     comprobar('Administrador no cambia fechaRegistro', solicitar('POST', BASE + ':commit', {'writes': [escritura]}, UID_ADMIN), 403)
     comprobar('Administrador no agrega campos extra', editar(ruta, {'total': 15}, UID_ADMIN), 403)
+    for indice, uid in enumerate(UIDS_PRUEBA[1:], start=2):
+        comprobar(f'Administrador {indice} puede listar inscripciones', solicitar('GET', BASE + '/inscripciones', uid=uid))
+        comprobar(f'Administrador {indice} puede editar participantes', editar(ruta, {'titular': 'Grupo Compartido'}, uid))
+        comprobar(f'Administrador {indice} puede marcar pagos', editar(ruta, {'pagado': True}, uid))
+        comprobar(f'Administrador {indice} puede desmarcar pagos', editar(ruta, {'pagado': False}, uid))
+        comprobar(f'Administrador {indice} puede guardar ajustes', configurar(uid=uid))
+        respuesta_extra, ruta_extra = nueva(uid=uid)
+        comprobar(f'Administrador {indice} puede crear inscripciones', respuesta_extra)
+        comprobar(f'Administrador {indice} puede eliminar inscripciones', solicitar('DELETE', BASE + '/' + ruta_extra, uid=uid))
     comprobar('Administrador cambia lugar y precio', configurar({**datos_evento(), 'lugar': 'Otro Club', 'ticketCentavos': 125050}))
     comprobar('Administrador cambia el plazo a un evento pasado', configurar(datos_evento(2020)))
     comprobar('Cierre rechaza alta pública válida', nueva(grupo)[0], 403)
     comprobar('Cierre también rechaza UID no autorizado', nueva(grupo, uid='no-autorizado')[0], 403)
     comprobar('Administrador puede crear después del cierre', nueva(grupo, uid=UID_ADMIN)[0])
+    for indice, uid in enumerate(UIDS_PRUEBA[1:], start=2):
+        comprobar(f'Administrador {indice} puede registrar manualmente fuera de plazo', nueva(grupo, uid=uid)[0])
     comprobar('Administrador reabre el plazo desde la configuración', configurar())
     comprobar('Reabrir el plazo permite nuevamente el registro público', nueva()[0])
     comprobar('Administrador puede borrar', solicitar('DELETE', BASE + '/' + ruta, uid=UID_ADMIN))

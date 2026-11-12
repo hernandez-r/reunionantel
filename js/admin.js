@@ -1,5 +1,5 @@
 import { collection, deleteDoc, doc, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc } from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js';
-import { EVENTO } from './config.js';
+import { EVENTO, listaAdministradoresValida } from './config.js';
 import { getFirebase } from './firebase-config.js';
 import { cerrarSesion, iniciarSesion, observarSesion } from './auth.js';
 import { crearFormularioParticipantes } from './formulario.js';
@@ -318,7 +318,7 @@ try {
   editor = crearFormularioParticipantes($('#editor-form'), EVENTO.maxInvitados);
   ({ db } = getFirebase());
   editorEvento = crearEditorEvento(db);
-  if (!EVENTO.adminUid || EVENTO.adminUid.includes('REEMPLAZAR')) throw new Error('Falta configurar el UID administrador en js/config.js y firestore.rules.');
+  if (!listaAdministradoresValida()) throw new Error('Falta configurar una lista válida de UID administradores en js/config.js y firestore.rules.');
   observarSesion({
     onAdmin: escucharInscripciones,
     onExit: () => { limpiarPanel(); mensaje($('#estado-auth')); },

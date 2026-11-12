@@ -1,7 +1,7 @@
 import { cierreDelDia, validarConfiguracionEvento } from './evento-datos.js';
 
 // Valores iniciales para el primer guardado desde el panel. Después manda Firestore.
-// El UID, la moneda, la zona horaria y el máximo no son editables desde el formulario.
+// Los UID, la moneda, la zona horaria y el máximo no son editables desde el formulario.
 export const EVENTO_INICIAL = Object.freeze({
   nombre: 'Reunión de fin de año',
   lugar: 'Club Los Carpinteros',
@@ -13,12 +13,28 @@ export const EVENTO_INICIAL = Object.freeze({
   ticketReferencia: 1000,
   // Entre 0 y 10. Sincronizar con maxInvitados() en firestore.rules.
   maxInvitados: 10,
-  // UID de Authentication, NO el correo ni una contraseña. Copiar también en las reglas.
-  adminUid: 'ZM7oO3DxIqYFWnGLYANS9s6Erar1',
+  // UID de Authentication, NO correos ni contraseñas. Una entrada por administrador.
+  // Agregá los otros dos UID aquí y en la lista de esAdmin() en firestore.rules.
+  adminUids: Object.freeze([
+    'ZM7oO3DxIqYFWnGLYANS9s6Erar1',
+    'S3eBI2LIZGQIMzZA7fO7uwI9d3x1',
+    'InNMTCkTbrW6jTvOBiSQUijARx23',
+
+  ]),
 });
 
 // Los imports ES reciben esta referencia actualizada cuando cambia la configuración.
 export let EVENTO = Object.freeze({ ...EVENTO_INICIAL, cierreInscripciones: cierreDelDia(EVENTO_INICIAL.limiteConfirmacion) });
+
+export function listaAdministradoresValida(uids = EVENTO.adminUids) {
+  return Array.isArray(uids) && uids.length > 0 && new Set(uids).size === uids.length
+    && uids.every((uid) => typeof uid === 'string' && uid.length > 0 && uid.length <= 128
+      && uid === uid.trim() && !uid.includes('REEMPLAZAR') && !uid.startsWith('UID_REAL_'));
+}
+
+export function esUidAdministrador(uid, uids = EVENTO.adminUids) {
+  return listaAdministradoresValida(uids) && typeof uid === 'string' && uids.includes(uid);
+}
 
 export function aplicarEvento(datos) {
   const error = validarConfiguracionEvento(datos);
