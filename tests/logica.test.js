@@ -1,4 +1,4 @@
-import { normalizarNombre, nombreValido, validarInscripcion, contarPersonas, calcularEstadisticas, filtrarInscripciones, generarCSV } from '../js/inscripciones.js';
+import { normalizarNombre, nombreValido, validarInscripcion, contarPersonas, calcularEstadisticas, calcularRecaudacion, filtrarInscripciones, generarCSV } from '../js/inscripciones.js';
 import { EVENTO, EVENTO_INICIAL, aplicarEvento, inscripcionesAbiertas, importeLegible, esUidAdministrador, listaAdministradoresValida } from '../js/config.js';
 import { fechaValida, inicioDiaUruguay, cierreDelDia, validarConfiguracionEvento, configuracionADocumento, configuracionDesdeDocumento } from '../js/evento-datos.js';
 import { crearFormularioParticipantes } from '../js/formulario.js';
@@ -52,6 +52,67 @@ prueba('Cambiar pago mueve el grupo completo', () => igual(calcularEstadisticas(
 prueba('Eliminar invitado actualiza totales', () => igual(contarPersonas({ ...grupo, invitados: grupo.invitados.slice(0, 2) }), { total: 3, mayores: 2, menores: 1 }));
 prueba('Cambiar categoría actualiza totales', () => igual(contarPersonas({ ...solo, invitados: [{ nombre: 'Ana López', tipo: 'menor' }] }).menores, 1));
 prueba('Eliminar inscripción actualiza estadísticas', () => igual(calcularEstadisticas([]), { grupos: 0, personas: 0, mayores: 0, menores: 0, pagadas: 0, pendientes: 0 }));
+prueba('Dinero: el titular solo debe un ticket', () => igual(calcularRecaudacion([solo], 1000), {
+  totalCentavos: 100000, cobradoCentavos: 0, pendienteCentavos: 100000,
+  mayoresTotal: 1, mayoresPagados: 0, mayoresPendientes: 1,
+}));
+prueba('Dinero: grupo pagado de dos mayores y dos menores cobra solo dos tickets', () => igual(calcularRecaudacion([grupo], 1000), {
+  totalCentavos: 200000, cobradoCentavos: 200000, pendienteCentavos: 0,
+  mayoresTotal: 2, mayoresPagados: 2, mayoresPendientes: 0,
+}));
+prueba('Dinero: combina grupos pagados y pendientes', () => igual(calcularRecaudacion([solo, grupo], 1000), {
+  totalCentavos: 300000, cobradoCentavos: 200000, pendienteCentavos: 100000,
+  mayoresTotal: 3, mayoresPagados: 2, mayoresPendientes: 1,
+}));
+prueba('Dinero: invitados menores no suman tickets, el titular sí', () => igual(calcularRecaudacion([
+  { ...grupo, invitados: grupo.invitados.map((invitado) => ({ ...invitado, tipo: 'menor' })) },
+], 1000).totalCentavos, 100000));
+prueba('Dinero: sin inscripciones todos los importes son cero', () => igual(calcularRecaudacion([], 1000), {
+  totalCentavos: 0, cobradoCentavos: 0, pendienteCentavos: 0,
+  mayoresTotal: 0, mayoresPagados: 0, mayoresPendientes: 0,
+}));
+prueba('Dinero: un ticket gratuito no elimina el conteo de mayores', () => igual(calcularRecaudacion([solo, grupo], 0), {
+  totalCentavos: 0, cobradoCentavos: 0, pendienteCentavos: 0,
+  mayoresTotal: 3, mayoresPagados: 2, mayoresPendientes: 1,
+}));
+prueba('Dinero: 0,29 por ticket se calcula sin errores de coma flotante', () => igual(calcularRecaudacion([solo, grupo], 0.29), {
+  totalCentavos: 87, cobradoCentavos: 58, pendienteCentavos: 29,
+  mayoresTotal: 3, mayoresPagados: 2, mayoresPendientes: 1,
+}));
+prueba('Dinero: conserva los decimales del ticket', () => igual(calcularRecaudacion([solo, grupo], 1000.5).totalCentavos, 300150));
+prueba('Dinero: desmarcar un grupo devuelve todos sus mayores a pendiente', () => igual(calcularRecaudacion([solo, { ...grupo, pagado: false }], 1000).pendienteCentavos, 300000));
+prueba('Dinero: agregar un menor no altera ningún importe', () => igual(
+  calcularRecaudacion([{ ...grupo, invitados: [...grupo.invitados, { nombre: 'Otro Invitado', tipo: 'menor' }] }], 1000),
+  calcularRecaudacion([grupo], 1000),
+));
+prueba('Dinero: cambiar un menor a mayor suma un ticket', () => igual(calcularRecaudacion([
+  { ...grupo, invitados: grupo.invitados.map((invitado, indice) => indice === 1 ? { ...invitado, tipo: 'mayor' } : invitado) },
+], 1000).cobradoCentavos, 300000));
+prueba('Dinero: quitar un invitado mayor descuenta un ticket', () => igual(calcularRecaudacion([
+  { ...grupo, invitados: grupo.invitados.slice(1) },
+], 1000).cobradoCentavos, 100000));
+prueba('Dinero: eliminar un grupo lo excluye de la recaudación', () => igual(calcularRecaudacion([solo], 1000).totalCentavos, 100000));
+prueba('Dinero: cambiar el ticket recalcula también lo cobrado, sin modificar pagos', () => {
+  igual(calcularRecaudacion([solo, grupo], 1500).cobradoCentavos, 300000);
+  igual(calcularRecaudacion([solo, grupo], 1000).cobradoCentavos, 200000);
+  igual(grupo.pagado, true);
+});
+prueba('Dinero: soporta el máximo permitido para el ticket', () => igual(calcularRecaudacion([solo, grupo], 1000000).totalCentavos, 300000000));
+prueba('Dinero: rechaza tarifas inválidas o con más de dos decimales', () => {
+  [NaN, Infinity, -1, 1000001, 0.001, undefined, null, '1000'].forEach((ticket) => {
+    let rechazo = false;
+    try { calcularRecaudacion([solo], ticket); } catch (error) { rechazo = error instanceof RangeError; }
+    igual(rechazo, true);
+  });
+});
+prueba('Dinero: total siempre equivale a cobrado más pendiente', () => {
+  [[], [solo], [grupo], [solo, grupo]].forEach((registros) => {
+    [0, 0.29, 1000, 1000.5, 1000000].forEach((ticket) => {
+      const dinero = calcularRecaudacion(registros, ticket);
+      igual(dinero.totalCentavos, dinero.cobradoCentavos + dinero.pendienteCentavos);
+    });
+  });
+});
 prueba('Busca por invitado sin distinguir tildes', () => igual(filtrarInscripciones([solo, grupo], 'LUCIA').map((registro) => registro.id), ['b']));
 prueba('Busca por titular', () => igual(filtrarInscripciones([solo, grupo], 'juan').map((registro) => registro.id), ['a']));
 prueba('Filtra pagados', () => igual(filtrarInscripciones([solo, grupo], '', 'pagados').map((registro) => registro.id), ['b']));

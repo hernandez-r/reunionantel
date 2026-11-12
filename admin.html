@@ -31,6 +31,16 @@
         <article class="tarjeta estadistica estadistica--pagado"><span>Personas · pagado</span><strong data-estadistica="pagadas">0</strong><small>pago del grupo recibido</small></article>
         <article class="tarjeta estadistica estadistica--pendiente"><span>Personas · pendiente</span><strong data-estadistica="pendientes">0</strong><small>pago del grupo pendiente</small></article>
       </div>
+      <section class="resumen-dinero" aria-labelledby="dinero-titulo">
+        <div class="dinero-encabezado"><h2 id="dinero-titulo">Recaudación (UYU)</h2><p>Ticket por mayor: <strong id="dinero-ticket">—</strong> UYU</p></div>
+        <div id="dinero-estado" role="status" aria-live="polite" hidden></div>
+        <div class="dinero-tarjetas" aria-live="polite">
+          <article class="tarjeta dinero-tarjeta dinero-tarjeta--total"><span>Total esperado</span><strong data-dinero="totalCentavos">—</strong><small><span data-mayores-dinero="mayoresTotal">—</span> mayores inscriptos</small></article>
+          <article class="tarjeta dinero-tarjeta dinero-tarjeta--cobrado"><span>Cobrado</span><strong data-dinero="cobradoCentavos">—</strong><small><span data-mayores-dinero="mayoresPagados">—</span> mayores en grupos pagados</small></article>
+          <article class="tarjeta dinero-tarjeta dinero-tarjeta--pendiente"><span>Pendiente de cobro</span><strong data-dinero="pendienteCentavos">—</strong><small><span data-mayores-dinero="mayoresPendientes">—</span> mayores en grupos pendientes</small></article>
+        </div>
+        <p class="nota dinero-aclaracion">Solo pagan los mayores, incluido el titular; los menores no abonan. Los importes corresponden a todo el evento, sin aplicar filtros, y se calculan con el ticket vigente. Cambiar el ticket o los mayores de un grupo recalcula también el cobrado: este resumen no es un historial de cobros.</p>
+      </section>
       <details id="configuracion-evento" class="tarjeta configuracion-evento">
         <summary><span><strong>Configuración del evento</strong><small>Nombre, lugar, fechas y ticket de referencia</small></span><span class="configuracion-indicador" aria-hidden="true">Editar <span>⌄</span></span></summary>
         <div class="configuracion-contenido">
@@ -45,7 +55,7 @@
                 <div class="campo"><label for="evento-fecha">Fecha del encuentro</label><input id="evento-fecha" name="fecha" type="date" required min="2020-01-01" max="2100-12-31"></div>
                 <div class="campo"><label for="evento-confirmacion">Confirmar asistencia hasta el</label><input id="evento-confirmacion" name="limiteConfirmacion" type="date" required min="2020-01-01" max="2100-12-31"></div>
                 <div class="campo"><label for="evento-pago">Fecha límite de pago</label><input id="evento-pago" name="limitePago" type="date" required min="2020-01-01" max="2100-12-31"></div>
-                <div class="campo"><label for="evento-ticket">Ticket de referencia (UYU)</label><input id="evento-ticket" name="ticketReferencia" type="number" required min="0" max="1000000" step="0.01" inputmode="decimal" aria-describedby="evento-ticket-ayuda"><small id="evento-ticket-ayuda">Referencia para mayores. No se define ni calcula el importe de menores.</small></div>
+                <div class="campo"><label for="evento-ticket">Ticket por mayor (UYU)</label><input id="evento-ticket" name="ticketReferencia" type="number" required min="0" max="1000000" step="0.01" inputmode="decimal" aria-describedby="evento-ticket-ayuda"><small id="evento-ticket-ayuda">Los menores no abonan. Cambiar el ticket recalcula el resumen de dinero, incluso el de grupos pagados.</small></div>
               </div>
               <div class="acciones-dialogo"><button id="evento-descartar" type="button" class="boton boton-secundario">Descartar cambios</button><button type="submit" class="boton boton-primario">Guardar configuración</button></div>
             </fieldset>

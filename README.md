@@ -12,6 +12,7 @@ Aplicación estática en HTML, CSS y JavaScript Vanilla. Formulario público, ad
 - Cierre público al terminar el día de confirmación elegido, hora de Uruguay. Las reglas usan ese mismo plazo guardado; cambiar el reloj o JavaScript no permite eludirlo.
 - Login privado por correo/contraseña, validación de sesión al recargar y autorización por UID en las reglas.
 - Dashboard en tiempo real, alta manual después del cierre, edición, invitados, eliminación con confirmación y pagos del grupo reversibles.
+- Recaudación en UYU: total esperado, cobrado según los grupos pagados y pendiente de cobro. Solo pagan los mayores, incluido el titular; los menores no abonan.
 - Búsqueda sin distinción de tildes, filtro de pagos, orden A–Z/Z–A, conteo y CSV de los resultados filtrados (un renglón por persona).
 - Interfaz responsive, etiquetas accesibles, diálogos nativos y mensajes de espera/error.
 
@@ -116,13 +117,13 @@ Editá **Configuración del evento** para cambiar nombre, lugar, fecha, confirma
 
 - Las fechas son días de Uruguay (UTC−3), entre 2020 y 2100. Confirmación ≤ pago ≤ evento; se permiten fechas iguales y eventos pasados para cerrar el registro.
 - La inscripción cierra al terminar el día de confirmación: por ejemplo, el 27/11 cierra el 28/11 a las 00:00 de Uruguay (03:00 UTC). El plazo se calcula desde el mismo timestamp tanto en la página como en las reglas, sin duplicar una fecha fija.
-- El ticket admite entre 0 y 1.000.000 UYU, con hasta dos decimales. Es referencia para mayores: **no calcula un total a pagar ni asigna un precio a menores**.
+- El ticket admite entre 0 y 1.000.000 UYU, con hasta dos decimales. Es el importe por mayor usado en el resumen de recaudación del panel. **Los menores no abonan**. El formulario público no cobra pagos en línea.
 - **Descartar cambios** vuelve a los valores guardados. Una transacción evita sobrescribir silenciosamente la edición realizada desde otra pestaña.
 - `js/config.js` contiene únicamente los valores de arranque del primer formulario y las constantes técnicas. Una vez guardado el evento, prevalecen los valores de Firestore.
 
 ### Reutilizar la página para otro encuentro
 
-Esta versión gestiona **un evento activo**, no un historial de eventos separados. Cambiar nombre/fechas **no borra ni separa inscripciones o pagos**. Antes de usarla para otro encuentro, exportá el CSV y gestioná la eliminación de los registros anteriores desde el panel, con sus confirmaciones. No hay vaciado automático ni eliminación masiva. Cambiar el ticket tampoco recalcula pagos ya marcados.
+Esta versión gestiona **un evento activo**, no un historial de eventos separados. Cambiar nombre/fechas **no borra ni separa inscripciones o pagos**. Antes de usarla para otro encuentro, exportá el CSV y gestioná la eliminación de los registros anteriores desde el panel, con sus confirmaciones. No hay vaciado automático ni eliminación masiva. Cambiar el ticket no cambia las marcas de pago, pero sí recalcula los importes del resumen monetario, incluidos los grupos ya pagados.
 
 Hay dos valores técnicos que siguen teniendo su equivalente en `firestore.rules`:
 
@@ -229,7 +230,7 @@ Todas las rutas propias son relativas (`./css/…`, `./js/…`, `./admin.html`).
 ```
 
 - El titular es siempre mayor. No se guardan totales redundantes: se calculan desde los integrantes.
-- `pagado` describe el **grupo**, no cada persona. No se guardan importes por inscripción ni se supone que menores y mayores pagan lo mismo. El precio guardado en la configuración es solo una referencia. A futuro pueden diseñarse pagos por persona con IDs estables y una colección/subcolección propia; requerirá migración y reglas nuevas. Hoy esa subcolección no tiene permisos.
+- `pagado` describe el **grupo**, no cada persona. Solo se cobra a sus mayores, incluyendo al titular; los menores no abonan. No se guardan importes por inscripción: el resumen monetario usa el ticket vigente de la configuración. A futuro pueden diseñarse pagos por persona con IDs estables y una colección/subcolección propia; requerirá migración y reglas nuevas. Hoy esa subcolección no tiene permisos.
 - `onSnapshot` actualiza estadísticas y lista automáticamente. Las tarjetas pagadas/pendientes cuentan **personas**, no grupos ni dinero.
 - `configuracion/evento` es el único documento de ajustes públicos. Guarda `nombre`, `lugar`, `fecha`, `limiteConfirmacion`, `limitePago`, `ticketCentavos` y `actualizadoEn`. Las tres fechas son timestamps a las 03:00 UTC (medianoche de Uruguay); el cierre se deriva sumando un día a `limiteConfirmacion`. Los centavos son enteros para evitar errores de coma flotante. `actualizadoEn` usa `serverTimestamp()` y permite detectar ediciones simultáneas.
 - Cambiar un pago actualiza solo `pagado`. Editar participantes usa una transacción para detectar cambios simultáneos en nombres/invitados y conserva pago y fecha.
@@ -237,6 +238,25 @@ Todas las rutas propias son relativas (`./css/…`, `./js/…`, `./admin.html`).
 - Si la conexión se corta durante una escritura, Firebase puede dejarla pendiente en memoria hasta reconectar. Esperá la confirmación y no cierres la pestaña. Los botones muestran el estado; no se promete éxito antes de la respuesta del servidor.
 - Los textos ingresados se renderizan mediante `textContent` y valores de inputs, nunca como HTML. CSV entrecomillado, BOM UTF-8, separador `;`, fórmulas neutralizadas.
 - Los diálogos usan `<dialog>`: se requieren navegadores modernos con soporte de módulos ES y dialog (Chrome, Edge, Firefox y Safari actuales).
+
+### Recuento de dinero en el panel
+
+La sección **Recaudación (UYU)** muestra tres importes independientes de los filtros de la tabla:
+
+| Importe | Cálculo |
+| --- | --- |
+| Total esperado | Todos los mayores inscriptos × ticket vigente |
+| Cobrado | Mayores de grupos marcados como pagados × ticket vigente |
+| Pendiente de cobro | Mayores de grupos pendientes × ticket vigente |
+
+El titular siempre se cuenta como mayor. Por ejemplo, un titular, un invitado mayor y dos menores suman **dos tickets**, no cuatro: con ticket de $1000, el grupo representa $2000. Al marcarlo pagado, esos $2000 pasan de pendiente a cobrado; al desmarcarlo, vuelven a pendiente.
+
+- El dinero se calcula en centavos enteros y solo se formatea al mostrarlo. Total esperado = cobrado + pendiente, sin errores de coma flotante.
+- Se actualiza al crear, editar o eliminar grupos/invitados, cambiar Mayor/Menor, marcar/desmarcar pagos o guardar un nuevo ticket. No depende de otra modificación en la colección de inscripciones para actualizar la tarifa.
+- Las tarjetas de **personas pagadas/pendientes** siguen contando a todas las personas del grupo, incluidos menores. Las tarjetas de **dinero** solo consideran a los mayores.
+- Hasta recibir una configuración confirmada por Firestore, se muestra `—`, no el ticket inicial del código. Un ticket guardado de cero es válido y muestra importes cero, conservando el conteo de mayores.
+- **No es un historial contable:** cambiar el ticket o los mayores de un grupo pagado recalcula también el cobrado. El sistema no registra cuánto se recibió en cada fecha ni conserva una tarifa histórica por pago.
+- No se modificaron el esquema de inscripciones ni las reglas para agregar este resumen. Para actualizar una instalación que ya funciona, basta desplegar el código de esta versión; no requiere una nueva migración de Firestore por esta funcionalidad.
 
 ## 8. Pruebas obligatorias y de seguridad
 
@@ -299,6 +319,10 @@ Usá un proyecto de prueba y nombres ficticios; luego borrá esos datos desde el
 | Pantallas de 360 px y escritorio, teclado y zoom 200% | Campos legibles, botones accesibles, tabla desplazable, diálogos utilizables |
 | Primer uso sin configuración | Público cerrado; administrador puede guardar el evento desde el panel |
 | Cambiar lugar, nombre, fechas y ticket | Se guardan y se reflejan en la página pública sin volver a desplegar |
+| Grupo de 2 mayores y 2 menores, ticket $1000 | Total esperado $2000; al pagarlo, cobrado $2000 y pendiente $0 |
+| Marcar/desmarcar pago o cambiar Mayor/Menor | Recalcula dinero según los mayores y el estado del grupo; menores no suman tickets |
+| Cambiar ticket guardado o filtrar la tabla | Nuevo ticket recalcula los importes; filtrar no altera el resumen global |
+| Ticket cero o configuración aún no disponible | Cero es una tarifa válida; sin configuración confirmada no se calculan importes |
 | Público/UID no autorizado intenta editar ajustes | Denegado por reglas |
 | Cambiar plazo a pasado y luego a futuro | Cierra y reabre las altas en interfaz y reglas, sin tocar los asistentes |
 | Dos pestañas editan ajustes simultáneamente | Conserva el borrador y exige recargar la configuración antes de sobrescribir |
@@ -314,12 +338,13 @@ Casos negativos adicionales: documento sin un campo, `pagado: 'false'`, `invitad
 
 **Verificado durante la implementación:**
 
-- 646 comprobaciones estáticas aprobadas, incluida la sincronización de las listas de administradores.
-- 55 pruebas de lógica, autorización por lista, fechas, precio y editor DOM aprobadas en Chromium.
-- 94 comprobaciones aprobadas contra Firestore Emulator, incluidos tres administradores, rechazo de otras cuentas, permisos del documento de ajustes, validaciones y cierre/reapertura desde la configuración; además se comprobó la restauración de reglas al finalizar. Los UID de los dos administradores adicionales eran ficticios y solo se habilitaron en el emulador.
+- 677 comprobaciones estáticas aprobadas, incluida la sincronización de las listas de administradores.
+- 72 pruebas de lógica, recaudación solo de mayores, autorización por lista, fechas, precio y editor DOM aprobadas en Chromium.
+- 110 comprobaciones aprobadas contra Firestore Emulator, incluidos los tres UID configurados y dos adicionales ficticios, rechazo de otras cuentas, permisos del documento de ajustes, validaciones y cierre/reapertura desde la configuración; además se comprobó la restauración de reglas al finalizar. Los UID ficticios solo se habilitaron en el emulador; no se autenticaron cuentas reales ni se accedió a producción.
 - Flujo público con el SDK real contra el emulador: grupo de cuatro personas, revisión, guardado, código y bloqueo de doble clic.
 - Dashboard con SDK real y emulador: consulta, pago del grupo, quitar invitado, actualización en vivo, eliminación confirmada y limpieza al salir. **La frontera de Authentication fue simulada en esta prueba de interfaz**, no se comprobó un login de producción.
 - Ajustes con SDK real y emulador: primer guardado, actualización de una página pública abierta, precio con decimales, plazos dinámicos, conservación de inscripciones, confirmación reabierta ante cambios y rechazo de edición concurrente. Revisión del formulario de ajustes a 360 y 1440 px, sin desbordes. No se realizaron escrituras en producción.
+- Recaudación con SDK real y emulador: grupos mixtos, marcar/desmarcar pagos, filtros sin afectar totales, tarifa modificada sin cambios en inscripciones, cambios de categoría, quitar invitados, eliminar grupos, ticket gratuito y máximo permitido. Sin importes basados en valores iniciales cuando no hay configuración confirmada; limpieza al salir y sin desbordes a 360, 768 y 1440 px. Authentication fue simulado en esta prueba de interfaz.
 - Sin desbordes de página a 360, 768 y 1440 px; tabla con scroll propio y navegación desde un subdirectorio `/reunion-fin-ano/`. Revisión visual de la página pública en móvil y escritorio. Para sortear una limitación de red del navegador del entorno de pruebas, se sirvió una copia temporal del SDK oficial sin cambiar los archivos entregados.
 
 **Pendiente de verificar con tu proyecto:** Authentication real (incluyendo recarga y UID no autorizado), persistencia/permisos en Firebase desplegado, desactivación de la exigencia de App Check si estaba habilitada y GitHub Pages remoto. No se dan por realizados sin tu configuración. No actives el enlace público hasta completar la matriz.

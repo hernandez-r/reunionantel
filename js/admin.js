@@ -1,10 +1,10 @@
 import { collection, deleteDoc, doc, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc } from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js';
-import { EVENTO, listaAdministradoresValida } from './config.js';
+import { EVENTO, importeLegible, listaAdministradoresValida } from './config.js';
 import { getFirebase } from './firebase-config.js';
 import { cerrarSesion, iniciarSesion, observarSesion } from './auth.js';
 import { crearFormularioParticipantes } from './formulario.js';
 import { crearEditorEvento } from './configuracion-admin.js';
-import { calcularEstadisticas, contarPersonas, filtrarInscripciones, generarCSV } from './inscripciones.js';
+import { calcularEstadisticas, calcularRecaudacion, contarPersonas, filtrarInscripciones, generarCSV } from './inscripciones.js';
 import { describirError, elemento, mensaje, mostrarEvento, mostrarResumen } from './ui.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -22,6 +22,7 @@ let edicion; // null para alta; copia del registro para detectar ediciones simul
 let referenciaNueva;
 let aEliminar;
 let avisoConexion = false;
+let estadoTarifa = 'cargando';
 const expandidos = new Set();
 const pagosPendientes = new Set();
 
@@ -32,6 +33,8 @@ function limpiarPanel() {
   dejarDeEscuchar = undefined;
   editorEvento?.detener();
   registros = [];
+  estadoTarifa = 'cargando';
+  renderizarRecaudacion();
   expandidos.clear();
   pagosPendientes.clear();
   avisoConexion = false;
@@ -103,6 +106,7 @@ function renderizar() {
   document.querySelectorAll('[data-estadistica]').forEach((nodo) => {
     nodo.textContent = estadisticas[nodo.dataset.estadistica];
   });
+  renderizarRecaudacion();
   const resultados = resultadosActuales();
   $('#resultados').textContent = `${resultados.length} de ${registros.length} inscripciones encontradas`;
   $('#exportar').disabled = resultados.length === 0;
@@ -156,6 +160,28 @@ function renderizar() {
     fragmento.append(fila, detalle);
   });
   $('#filas').replaceChildren(fragmento);
+}
+
+function renderizarRecaudacion() {
+  const tarifaLista = sesionActiva && estadoTarifa === 'lista';
+  if (!tarifaLista) {
+    document.querySelectorAll('[data-dinero], [data-mayores-dinero]').forEach((nodo) => { nodo.textContent = '—'; });
+    $('#dinero-ticket').textContent = '—';
+    mensaje($('#dinero-estado'), estadoTarifa === 'cargando'
+      ? 'Cargando la tarifa del evento…'
+      : 'No hay una tarifa confirmada. Revisá la configuración del evento para calcular los importes.',
+    estadoTarifa === 'cargando' ? 'info' : 'aviso');
+    return;
+  }
+  const recaudacion = calcularRecaudacion(registros, EVENTO.ticketReferencia);
+  document.querySelectorAll('[data-dinero]').forEach((nodo) => {
+    nodo.textContent = importeLegible(recaudacion[nodo.dataset.dinero] / 100);
+  });
+  document.querySelectorAll('[data-mayores-dinero]').forEach((nodo) => {
+    nodo.textContent = recaudacion[nodo.dataset.mayoresDinero];
+  });
+  $('#dinero-ticket').textContent = importeLegible(EVENTO.ticketReferencia);
+  mensaje($('#dinero-estado'));
 }
 
 async function cambiarPago(registro, pagado) {
@@ -317,7 +343,12 @@ $('#exportar').addEventListener('click', () => {
 try {
   editor = crearFormularioParticipantes($('#editor-form'), EVENTO.maxInvitados);
   ({ db } = getFirebase());
-  editorEvento = crearEditorEvento(db);
+  editorEvento = crearEditorEvento(db, {
+    alCambiar: (disponible) => {
+      estadoTarifa = disponible ? 'lista' : 'no-disponible';
+      if (sesionActiva) renderizarRecaudacion();
+    },
+  });
   if (!listaAdministradoresValida()) throw new Error('Falta configurar una lista válida de UID administradores en js/config.js y firestore.rules.');
   observarSesion({
     onAdmin: escucharInscripciones,

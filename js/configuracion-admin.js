@@ -3,7 +3,7 @@ import { normalizarTextoEvento, validarConfiguracionEvento } from './evento-dato
 import { observarEvento, guardarEvento } from './evento-service.js';
 import { describirError, mensaje, mostrarEvento } from './ui.js';
 
-export function crearEditorEvento(db) {
+export function crearEditorEvento(db, { alCambiar = () => {} } = {}) {
   const $ = (selector) => document.querySelector(selector);
   const formulario = $('#evento-form');
   const campos = $('#evento-campos');
@@ -91,6 +91,7 @@ export function crearEditorEvento(db) {
         if (!activo || version !== generacion) return;
         ultimoEvento = datos;
         mostrarEvento();
+        alCambiar(Boolean(datos));
         campos.disabled = guardando;
         if (!modificado) cargar(datos ?? EVENTO_INICIAL);
         if (!datos) {
@@ -102,6 +103,7 @@ export function crearEditorEvento(db) {
       }, () => {
         if (!activo || version !== generacion) return;
         campos.disabled = true;
+        alCambiar(false);
         mensaje(estado, 'No se pudo cargar la configuración. Verificá que las nuevas reglas de firestore.rules estén publicadas en Firebase Console y volvé a iniciar sesión.', 'error');
       });
     },

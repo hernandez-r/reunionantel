@@ -38,6 +38,29 @@ export function calcularEstadisticas(registros) {
   }, { grupos: 0, personas: 0, mayores: 0, menores: 0, pagadas: 0, pendientes: 0 });
 }
 
+export function calcularRecaudacion(registros, ticketReferencia) {
+  const ticketCentavos = Math.round(ticketReferencia * 100);
+  if (!Number.isFinite(ticketReferencia) || ticketReferencia < 0 || ticketReferencia > 1_000_000
+      || Math.abs(ticketReferencia * 100 - ticketCentavos) > 0.000001) {
+    throw new RangeError('El ticket debe ser un importe válido con hasta dos decimales.');
+  }
+  let mayoresPagados = 0;
+  let mayoresPendientes = 0;
+  for (const registro of registros) {
+    const { mayores } = contarPersonas(registro); // Incluye al titular, nunca a los menores.
+    if (registro.pagado) mayoresPagados += mayores;
+    else mayoresPendientes += mayores;
+  }
+  const mayoresTotal = mayoresPagados + mayoresPendientes;
+  // No se persisten totales redundantes. Cada cálculo usa enteros en centavos.
+  return {
+    totalCentavos: mayoresTotal * ticketCentavos,
+    cobradoCentavos: mayoresPagados * ticketCentavos,
+    pendienteCentavos: mayoresPendientes * ticketCentavos,
+    mayoresTotal, mayoresPagados, mayoresPendientes,
+  };
+}
+
 function textoBuscable(valor) {
   return valor.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('es').trim();
 }
